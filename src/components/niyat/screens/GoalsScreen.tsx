@@ -37,7 +37,8 @@ const goals = [
 export function GoalsScreen() {
   const [active, setActive] = useState<(typeof tabs)[number]>("Haftalik");
   return (
-    <div className="relative h-full overflow-y-auto scrollbar-hide pb-24">
+    <div className="relative h-full">
+    <div className="h-full overflow-y-auto scrollbar-hide pb-28">
       <div className="px-6 pt-4 pb-2">
         <h1 className="font-serif text-[26px] text-foreground">Maqsadlar</h1>
         <p className="text-[13px] text-muted-foreground mt-1">
@@ -90,7 +91,8 @@ export function GoalsScreen() {
         ))}
       </div>
 
-      <button className="absolute bottom-6 right-6 inline-flex items-center gap-2 h-12 px-5 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/30 active:scale-95 transition">
+    </div>
+      <button className="absolute bottom-4 right-5 inline-flex items-center gap-2 h-12 px-5 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/40 active:scale-95 transition z-30">
         <Plus size={18} /> <span className="text-[13px] font-semibold">Yangi maqsad</span>
       </button>
     </div>

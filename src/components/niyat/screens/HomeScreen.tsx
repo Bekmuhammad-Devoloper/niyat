@@ -45,7 +45,8 @@ export function HomeScreen() {
   ];
 
   return (
-    <div className="relative h-full overflow-y-auto scrollbar-hide pb-24">
+    <div className="relative h-full">
+    <div className="h-full overflow-y-auto scrollbar-hide pb-28">
       <div className="px-6 pt-4 pb-3 fade-up">
         <h1 className="font-serif text-[28px] leading-tight text-foreground">
           Assalomu alaykum, Bek
@@ -152,10 +153,11 @@ export function HomeScreen() {
         </ul>
       </div>
 
-      {/* Floating mic */}
+    </div>
+      {/* Floating mic — pinned to phone frame, not scrolling */}
       <button
-        className="absolute bottom-6 right-6 h-14 w-14 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center active:scale-95 transition"
-        aria-label="Voice"
+        className="absolute bottom-4 right-5 h-14 w-14 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/40 flex items-center justify-center active:scale-95 transition z-30"
+        aria-label="Ovozli yozish"
       >
         <Mic size={22} strokeWidth={2.2} />
       </button>
