@@ -11,7 +11,11 @@ const tabs: { key: TabKey; label: string; Icon: typeof Home; center?: boolean }[
 
 export function TabBar({ active, onChange }: { active: TabKey; onChange: (k: TabKey) => void }) {
   return (
-    <nav className="relative border-t border-border bg-background/95 backdrop-blur-sm">
+    <nav
+      role="tablist"
+      aria-label="Asosiy navigatsiya"
+      className="relative border-t border-border bg-background/95 backdrop-blur-sm"
+    >
       <div className="grid grid-cols-5 px-2 pt-2 pb-6 items-end">
         {tabs.map(({ key, label, Icon, center }) => {
           const isActive = active === key;
@@ -19,6 +23,10 @@ export function TabBar({ active, onChange }: { active: TabKey; onChange: (k: Tab
             return (
               <button
                 key={key}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                aria-label={label}
                 onClick={() => onChange(key)}
                 className="flex flex-col items-center gap-1 -mt-6 active:scale-95 transition"
               >
@@ -38,6 +46,10 @@ export function TabBar({ active, onChange }: { active: TabKey; onChange: (k: Tab
           return (
             <button
               key={key}
+              type="button"
+              role="tab"
+              aria-selected={isActive}
+              aria-label={label}
               onClick={() => onChange(key)}
               className="flex flex-col items-center justify-center gap-1.5 py-1 transition-transform active:scale-95"
             >

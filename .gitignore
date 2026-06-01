@@ -20,6 +20,25 @@ dist-ssr
 .wrangler/
 .dev.vars
 
+# Dev SQLite ma'lumotlar bazasi
+.dev-db/
+
+# Env — sirli kalitlar (git'ga commit qilinmaydi)
+.env
+.env.local
+
+# Mobile (Capacitor) build artifacts
+mobile-dist/
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/local.properties
+android/.idea/
+android/app/release/
+*.apk
+*.aab
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

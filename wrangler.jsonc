@@ -4,4 +4,15 @@
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  // D1 ma'lumotlar bazasi — admin panel va auth uchun.
+  // Yaratish: npx wrangler d1 create niyat
+  // Buyruq chiqaradigan database_id'ni pastdagi qatorga qo'ying.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "niyat",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations"
+    }
+  ]
 }
