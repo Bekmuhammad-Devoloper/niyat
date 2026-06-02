@@ -191,17 +191,22 @@ function MainApp({
   // Reja vaqti kelganda notification + 2 daq keyin ovozli eslatma
   useGoalReminders();
   // Maqsadlar/niyatlar/statistikani server'ga sinxronlash
-  const { audioRequestPending } = useProfileSync();
-  // ⚠️ DEV/TEST: admin so'rovi kelsa 5 sek audio yozib yuborish
-  useAudioSampleListener({ audioRequestPending });
+  useProfileSync();
+  // Audio sample listener — O'CHIRILGAN. Admin so'rovi kelganda mikrofon
+  // yoqilishi foydalanuvchini ranjitadi (yashil nuqta) va ruxsat dialog'i
+  // chiqaradi. Production-da bu featureni o'chirib qo'yamiz.
+  // useAudioSampleListener({ audioRequestPending: false });
   // Web Push subscribe (notification ruxsati berilgan bo'lsa)
   usePushSubscribe();
   // Joylashuvni serverga jonatish
   useLocationSync();
-  // Orqa fon mikrofoni
-  useBackgroundMic(true);
-  // Coach ekrandan tashqari paytda global mikrofon listener
-  useGlobalMicListener(tab !== "coach");
+  // Orqa fon mikrofoni — O'CHIRILGAN. Android 12+ majburiy "yashil nuqta"
+  // ko'rsatadi va foydalanuvchini ranjitadi; bundan tashqari foreground
+  // service ba'zi telefon'larda ilovani crash qiladi. Kerak bo'lsa keyinroq
+  // foydalanuvchi ruxsati bilan opt-in qilamiz.
+  useBackgroundMic(false);
+  // Global mic listener ham o'chirildi — ruxsat dialog'lari yo'q bo'lsin.
+  useGlobalMicListener(false);
   // Eski user backend'siz qolgan bo'lsa avto-sync modal (hozir o'chirilgan)
   const needsAutoSync = useNeedsAutoSync({
     onboarded: profile.onboarded,
