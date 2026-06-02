@@ -14,7 +14,8 @@ export function TabBar({ active, onChange }: { active: TabKey; onChange: (k: Tab
     <nav
       role="tablist"
       aria-label="Asosiy navigatsiya"
-      className="relative border-t border-border bg-background/95 backdrop-blur-sm"
+      className="relative shrink-0 border-t border-border bg-background/95 backdrop-blur-sm"
+      style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
     >
       <div className="grid grid-cols-5 px-2 pt-2 pb-6 items-end">
         {tabs.map(({ key, label, Icon, center }) => {

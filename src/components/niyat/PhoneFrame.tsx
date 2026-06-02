@@ -7,8 +7,13 @@ const IS_MOBILE_APP =
 
 export function PhoneFrame({ children }: { children: ReactNode }) {
   if (IS_MOBILE_APP) {
+    // Mobil ilovada — viewport balandligida QOTGAN konteyner.
+    // `h-[100dvh]` (dynamic viewport height) — telefonning address bar / soft
+    // navigation bar yashirin/ko'rinib turishiga moslashadi.
+    // `overflow-hidden` — root scroll bo'lmasin, faqat ichki ekran scroll bo'lsin.
+    // Bu TabBar'ning doim eng pastda turishini ta'minlaydi.
     return (
-      <div className="min-h-screen w-full flex flex-col bg-background">
+      <div className="h-[100dvh] w-full flex flex-col bg-background overflow-hidden">
         {children}
       </div>
     );
