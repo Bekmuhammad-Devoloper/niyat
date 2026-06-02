@@ -1371,7 +1371,7 @@ function DevPhoto({ initials }: { initials: string }) {
   }
   return (
     <img
-      src="/dev-photo.jpg"
+      src="/developer.image.jpg"
       alt={initials}
       onError={() => setErrored(true)}
       style={{ width: "100%", height: "100%", objectFit: "cover" }}
