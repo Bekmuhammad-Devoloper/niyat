@@ -24,35 +24,47 @@ jobs:
           echo "Commit:  ${{ github.sha }}"
           echo "Author:  ${{ github.actor }}"
 
+      - name: Verify secrets are set
+        env:
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER_NAME: ${{ secrets.SERVER_USER }}
+        run: |
+          if [ -z "$HOST" ]; then echo "❌ SERVER_HOST sekret yo'q"; exit 1; fi
+          if [ -z "$USER_NAME" ]; then echo "❌ SERVER_USER sekret yo'q"; exit 1; fi
+          echo "✓ Sekretlar mavjud"
+          echo "  HOST uzunligi: ${#HOST}"
+          echo "  USER uzunligi: ${#USER_NAME}"
+
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known_hosts
+        env:
+          HOST: ${{ secrets.SERVER_HOST }}
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
           chmod 644 ~/.ssh/known_hosts
 
-      - name: Deploy via SSH
+      - name: Write deploy script
         env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
           BRANCH: ${{ github.ref_name }}
         run: |
-          ssh -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_HOST}" bash -s <<ENDSSH
+          cat > /tmp/deploy.sh <<DEPLOY_SCRIPT
+          #!/bin/bash
           set -e
           cd /home/bekmuhammad_devoloper/niyat
 
           echo "=== 1) Git yangilash ==="
           git fetch niyat
-          git reset --hard "niyat/${BRANCH}"
+          git reset --hard niyat/${BRANCH}
           git log -1 --oneline
 
           echo "=== 2) Dependencies ==="
           if ! git diff --quiet HEAD@{1} HEAD -- package.json package-lock.json 2>/dev/null; then
-            echo "package.json o'zgargan — npm install ishga tushyapti..."
+            echo "package.json o'zgargan — npm ci..."
             npm ci
           else
             echo "package.json o'zgarmagan — o'tkazib yuborildi"
@@ -68,17 +80,22 @@ jobs:
           echo "=== 5) Health check ==="
           STATUS=\$(systemctl is-active niyat)
           echo "Service: \$STATUS"
-          if [ "\$STATUS" != "active" ]; then
-            echo "❌ Service active emas!"
-            exit 1
-          fi
+          [ "\$STATUS" = "active" ] || { echo "❌ Service active emas"; exit 1; }
 
           HTTP=\$(curl -sI -o /dev/null -w "%{http_code}" https://my.niyat.tech)
           echo "HTTP:    \$HTTP"
-          if [ "\$HTTP" != "200" ] && [ "\$HTTP" != "304" ]; then
-            echo "❌ HTTP javob: \$HTTP"
-            exit 1
-          fi
+          [ "\$HTTP" = "200" ] || [ "\$HTTP" = "304" ] || { echo "❌ HTTP \$HTTP"; exit 1; }
 
           echo "✅ Deploy muvaffaqiyatli — https://my.niyat.tech"
-          ENDSSH
+          DEPLOY_SCRIPT
+          chmod +x /tmp/deploy.sh
+          echo "✓ deploy.sh yozildi"
+          echo "--- birinchi 5 qator ---"
+          head -5 /tmp/deploy.sh
+
+      - name: Run deploy on server
+        env:
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER_NAME: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "${USER_NAME}@${HOST}" 'bash -s' < /tmp/deploy.sh
