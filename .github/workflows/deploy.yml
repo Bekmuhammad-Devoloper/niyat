@@ -62,8 +62,8 @@ jobs:
           git config --global --add safe.directory /home/bekmuhammad_devoloper/niyat 2>/dev/null || true
 
           echo "=== 1) Git yangilash ==="
-          git fetch niyat
-          git reset --hard niyat/${BRANCH}
+          git fetch origin
+          git reset --hard origin/${BRANCH}
           git log -1 --oneline
 
           echo "=== 2) Dependencies ==="
