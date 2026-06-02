@@ -1,8 +1,5 @@
 name: Deploy to GCE server
 
-# Qachon ishga tushadi:
-#  - feature/kaaba-qibla-admin yoki main branch'ga push qilinganda
-#  - qo'lda "Run workflow" tugmasi bosilganda
 on:
   push:
     branches:
@@ -10,8 +7,6 @@ on:
       - main
   workflow_dispatch:
 
-# Bir vaqtda faqat 1 ta deploy ketadi — race condition'ni oldini olish.
-# Yangi push kelsa, eskisini bekor qilib yangisi boshlanadi.
 concurrency:
   group: deploy-gce
   cancel-in-progress: true
@@ -28,53 +23,62 @@ jobs:
           echo "Branch:  ${{ github.ref_name }}"
           echo "Commit:  ${{ github.sha }}"
           echo "Author:  ${{ github.actor }}"
-          echo "Message: ${{ github.event.head_commit.message }}"
 
-      - name: SSH and deploy
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Setup SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          command_timeout: 12m
-          script: |
-            set -e
-            cd /home/bekmuhammad_devoloper/niyat
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-            echo "=== 1) Git yangilash ==="
-            git fetch niyat
-            git reset --hard niyat/${{ github.ref_name }}
-            git log -1 --oneline
+      - name: Add server to known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
+          chmod 644 ~/.ssh/known_hosts
 
-            echo "=== 2) Dependencies (faqat package.json o'zgarganda) ==="
-            if ! git diff --quiet HEAD@{1} HEAD -- package.json package-lock.json 2>/dev/null; then
-              echo "package.json o'zgargan — npm install ishga tushyapti..."
-              npm ci
-            else
-              echo "package.json o'zgarmagan — npm install o'tkazib yuborildi"
-            fi
+      - name: Deploy via SSH
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          ssh -o StrictHostKeyChecking=no "${SERVER_USER}@${SERVER_HOST}" bash -s <<ENDSSH
+          set -e
+          cd /home/bekmuhammad_devoloper/niyat
 
-            echo "=== 3) Build ==="
-            npm run build 2>&1 | tail -5
+          echo "=== 1) Git yangilash ==="
+          git fetch niyat
+          git reset --hard "niyat/${BRANCH}"
+          git log -1 --oneline
 
-            echo "=== 4) Service restart ==="
-            systemctl restart niyat
-            sleep 8
+          echo "=== 2) Dependencies ==="
+          if ! git diff --quiet HEAD@{1} HEAD -- package.json package-lock.json 2>/dev/null; then
+            echo "package.json o'zgargan — npm install ishga tushyapti..."
+            npm ci
+          else
+            echo "package.json o'zgarmagan — o'tkazib yuborildi"
+          fi
 
-            echo "=== 5) Health check ==="
-            STATUS=$(systemctl is-active niyat)
-            echo "Service: $STATUS"
-            if [ "$STATUS" != "active" ]; then
-              echo "❌ Service active emas!"
-              exit 1
-            fi
+          echo "=== 3) Build ==="
+          npm run build 2>&1 | tail -5
 
-            HTTP=$(curl -sI -o /dev/null -w "%{http_code}" https://my.niyat.tech)
-            echo "HTTP:    $HTTP"
-            if [ "$HTTP" != "200" ] && [ "$HTTP" != "304" ]; then
-              echo "❌ HTTP javob: $HTTP"
-              exit 1
-            fi
+          echo "=== 4) Service restart ==="
+          systemctl restart niyat
+          sleep 8
 
-            echo "✅ Deploy muvaffaqiyatli — https://my.niyat.tech"
+          echo "=== 5) Health check ==="
+          STATUS=\$(systemctl is-active niyat)
+          echo "Service: \$STATUS"
+          if [ "\$STATUS" != "active" ]; then
+            echo "❌ Service active emas!"
+            exit 1
+          fi
+
+          HTTP=\$(curl -sI -o /dev/null -w "%{http_code}" https://my.niyat.tech)
+          echo "HTTP:    \$HTTP"
+          if [ "\$HTTP" != "200" ] && [ "\$HTTP" != "304" ]; then
+            echo "❌ HTTP javob: \$HTTP"
+            exit 1
+          fi
+
+          echo "✅ Deploy muvaffaqiyatli — https://my.niyat.tech"
+          ENDSSH
