@@ -110,7 +110,15 @@ export function NiyatApp() {
                     return;
                   }
                 } else {
-                  toast.error("Kutilmagan xato. Qayta urining.");
+                  // Mobil ilovada Chrome DevTools yo'q — xato matnini toast'da
+                  // ko'rsatamiz, foydalanuvchi nima bo'lganini ko'rsin.
+                  const msg =
+                    err instanceof Error
+                      ? err.message
+                      : typeof err === "string"
+                        ? err
+                        : "Noma'lum xato";
+                  toast.error(`Server bilan bog'lanib bo'lmadi: ${msg}`);
                   console.error("[onboarding] xato:", err);
                   return;
                 }

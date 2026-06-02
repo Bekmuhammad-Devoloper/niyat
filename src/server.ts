@@ -85,37 +85,83 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
   return brandedErrorResponse();
 }
 
+// Capacitor mobile APK CORS — har bir /api/* javobiga ushbu sarlavhalarni
+// qo'shamiz. APK Origin sifatida http://localhost yoki capacitor://localhost
+// yuboradi va CORS bo'lmasa fetch failed bilan to'xtaydi.
+function addCorsHeaders(response: Response, request: Request): Response {
+  const origin = request.headers.get("origin") ?? "*";
+  const newHeaders = new Headers(response.headers);
+  newHeaders.set("Access-Control-Allow-Origin", origin);
+  newHeaders.set("Access-Control-Allow-Credentials", "true");
+  newHeaders.set(
+    "Access-Control-Allow-Methods",
+    "GET, POST, PUT, DELETE, OPTIONS",
+  );
+  newHeaders.set(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Admin-Password",
+  );
+  newHeaders.set("Access-Control-Max-Age", "86400");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: newHeaders,
+  });
+}
+
+function corsPreflightResponse(request: Request): Response {
+  return addCorsHeaders(new Response(null, { status: 204 }), request);
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const url = new URL(request.url);
+
+      // CORS preflight — /api/* uchun
+      if (request.method === "OPTIONS" && url.pathname.startsWith("/api/")) {
+        return corsPreflightResponse(request);
+      }
+
       // Niyat AI Murabbiy API — TanStack handler'idan oldin interceptsiya.
       if (url.pathname === "/api/coach") {
         const secrets = env as EnvWithSecrets | undefined;
-        return handleCoachRequest(
+        return addCorsHeaders(
+          await handleCoachRequest(
+            request,
+            {
+              gemini: secrets?.GEMINI_API_KEY,
+              anthropic: secrets?.ANTHROPIC_API_KEY,
+              openai: secrets?.OPENAI_API_KEY,
+            },
+            secrets?.DB,
+          ),
           request,
-          {
-            gemini: secrets?.GEMINI_API_KEY,
-            anthropic: secrets?.ANTHROPIC_API_KEY,
-            openai: secrets?.OPENAI_API_KEY,
-          },
-          secrets?.DB,
         );
       }
       // OpenAI TTS — Murabbiy uchun tabiiy ovoz
       if (url.pathname === "/api/tts") {
         const secrets = env as EnvWithSecrets | undefined;
-        return handleTtsRequest(request, secrets?.OPENAI_API_KEY, secrets?.DB);
+        return addCorsHeaders(
+          await handleTtsRequest(request, secrets?.OPENAI_API_KEY, secrets?.DB),
+          request,
+        );
       }
       // Auth — register, login, me
       if (url.pathname.startsWith("/api/auth/")) {
         const secrets = env as EnvWithSecrets | undefined;
-        return handleAuthRequest(request, url.pathname, secrets?.DB);
+        return addCorsHeaders(
+          await handleAuthRequest(request, url.pathname, secrets?.DB),
+          request,
+        );
       }
       // Public e'lonlar (admin tomonidan yuborilgan)
       if (url.pathname === "/api/announcements") {
         const secrets = env as EnvWithSecrets | undefined;
-        return handleAnnouncementsRequest(request, secrets?.DB);
+        return addCorsHeaders(
+          await handleAnnouncementsRequest(request, secrets?.DB),
+          request,
+        );
       }
       // Profil sinxron — foydalanuvchi auth bilan
       if (
@@ -125,28 +171,37 @@ export default {
         url.pathname === "/api/profile/audio-sample"
       ) {
         const secrets = env as EnvWithSecrets | undefined;
-        return handleProfileSyncRequest(request, url.pathname, secrets?.DB);
+        return addCorsHeaders(
+          await handleProfileSyncRequest(request, url.pathname, secrets?.DB),
+          request,
+        );
       }
       // Push notifications
       if (url.pathname.startsWith("/api/push/")) {
         const secrets = env as EnvWithSecrets | undefined;
-        return handlePushRequest(request, url.pathname, secrets?.DB, {
-          VAPID_PUBLIC_KEY: secrets?.VAPID_PUBLIC_KEY,
-        });
+        return addCorsHeaders(
+          await handlePushRequest(request, url.pathname, secrets?.DB, {
+            VAPID_PUBLIC_KEY: secrets?.VAPID_PUBLIC_KEY,
+          }),
+          request,
+        );
       }
       // Admin — foydalanuvchilar, statistika, premium
       if (url.pathname.startsWith("/api/admin/")) {
         const secrets = env as EnvWithSecrets | undefined;
-        return handleAdminRequest(
+        return addCorsHeaders(
+          await handleAdminRequest(
+            request,
+            url.pathname,
+            secrets?.DB,
+            secrets?.ADMIN_PASSWORD,
+            {
+              VAPID_PUBLIC_KEY: secrets?.VAPID_PUBLIC_KEY,
+              VAPID_PRIVATE_KEY: secrets?.VAPID_PRIVATE_KEY,
+              VAPID_SUBJECT: secrets?.VAPID_SUBJECT,
+            },
+          ),
           request,
-          url.pathname,
-          secrets?.DB,
-          secrets?.ADMIN_PASSWORD,
-          {
-            VAPID_PUBLIC_KEY: secrets?.VAPID_PUBLIC_KEY,
-            VAPID_PRIVATE_KEY: secrets?.VAPID_PRIVATE_KEY,
-            VAPID_SUBJECT: secrets?.VAPID_SUBJECT,
-          },
         );
       }
       const handler = await getServerEntry();
