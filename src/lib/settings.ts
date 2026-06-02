@@ -139,8 +139,8 @@ export const DEFAULT_SETTINGS: Settings = {
     ttsRate: 1.0,
     ttsPitch: 1.0,
     preferredLang: "uz-UZ",
-    micAlwaysOn: true, // MVP 1 default: doimiy yoniq
-    micBackground: true, // MVP 1 default: ilova yopiq paytda ham yoqilgan
+    micAlwaysOn: false, // default: o'chiq — foydalanuvchi Coach'da xohlasa yoqadi
+    micBackground: false, // default: o'chiq — Sozlamalar → Ovoz orqali yoqiladi
   },
 };
 

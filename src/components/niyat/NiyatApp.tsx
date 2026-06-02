@@ -26,6 +26,7 @@ import { useLocationSync } from "@/lib/hooks/use-location-sync";
 import { useBackgroundMic } from "@/lib/hooks/use-background-mic";
 import { useGlobalMicListener } from "@/lib/hooks/use-global-mic-listener";
 import { useNeedsAutoSync } from "@/lib/hooks/use-backend-sync-check";
+import { useSettings } from "@/lib/hooks/use-settings";
 import { AutoSyncModal } from "./AutoSyncModal";
 
 const SCREEN_REGISTRY: Record<TabKey, React.ComponentType> = {
@@ -184,6 +185,7 @@ function MainApp({
   setProfile: ReturnType<typeof useUserProfile>["setProfile"];
 }) {
   const [tab, setTab] = useState<TabKey>("home");
+  const { settings: micSettings } = useSettings();
   // Eslatmalarni global hook orqali rejalashtirish (settings'ga qarab)
   useNotifications();
   // Daraja sovg'alari — 3-darajada 1 hafta, 5-darajada 1 oy Premium
@@ -198,12 +200,14 @@ function MainApp({
   usePushSubscribe();
   // Joylashuvni serverga jonatish
   useLocationSync();
-  // Orqa fon mikrofoni — 24/7 jim eshitib turadi (Android'da yashil
-  // status bar nuqtasi majburiy ko'rinadi, OS xavfsizlik talabi).
-  // 3 sek kechiktirish va error boundary ilovani crash'dan saqlaydi.
-  useBackgroundMic(true);
-  // Coach ekrandan tashqari paytda global mikrofon listener
-  useGlobalMicListener(tab !== "coach");
+  // Orqa fon mikrofoni — faqat foydalanuvchi sozlamalardan yoqsa.
+  // Default: o'chiq. Sozlamalar → Ovoz → "Orqa fon mikrofoni" toggle bilan
+  // yoqiladi. Avtomatik yoqilsa registratsiya paytida ilovani crash qiladi.
+  useBackgroundMic(micSettings.voice.micBackground);
+  // Coach'dan tashqari ekranda global mic — micAlwaysOn bo'lsa
+  useGlobalMicListener(
+    micSettings.voice.micAlwaysOn && tab !== "coach",
+  );
   // Eski user backend'siz qolgan bo'lsa avto-sync modal (hozir o'chirilgan)
   const needsAutoSync = useNeedsAutoSync({
     onboarded: profile.onboarded,
