@@ -57,6 +57,10 @@ jobs:
           set -e
           cd /home/bekmuhammad_devoloper/niyat
 
+          # Root foydalanuvchi sifatida ishga tushyapmiz, lekin papka egasi
+          # bekmuhammad_devoloper — git buni shubhali deb biladi. Trust deb belgilash.
+          git config --global --add safe.directory /home/bekmuhammad_devoloper/niyat 2>/dev/null || true
+
           echo "=== 1) Git yangilash ==="
           git fetch niyat
           git reset --hard niyat/${BRANCH}
