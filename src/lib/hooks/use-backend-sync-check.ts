@@ -25,21 +25,20 @@ export function useBackendSyncCheck() {
   return { isSynced, refresh };
 }
 
-// Mavjud foydalanuvchi token'siz qolib ketgan bo'lsa — avtomatik bog'lanish
-// uchun login modal'ini ochish kerakligini bildiradi. Login uchun parol kerak
-// — uni faqat foydalanuvchidan sorashimiz mumkin (hash dan tiklab bo'lmaydi).
+// Avval — token yo'q bo'lsa "Markaziy serverga bog'lanish" modali chiqardi
+// va foydalanuvchidan parolni qayta so'rardi. Bu UX'ni buzar edi.
 //
-// Bu hook har ilova ochilganda tekshiradi: agar onboarded + loggedIn lekin
-// token yo'q bo'lsa, true qaytaradi. NiyatApp shuni ko'rib, modal chiqaradi.
-export function useNeedsAutoSync(opts: {
+// Endi modal yo'q. Onboarding paytida foydalanuvchi avtomatik backend'ga
+// ro'yxatdan o'tadi (NiyatApp ichidagi `auth.register` chaqiriqi). Eski
+// foydalanuvchilar tokensiz qolsa, MeScreen'dagi banner orqali xohlaganda
+// qo'lda sinxronlash mumkin. Ilovaning asosiy funksiyalari offline ham
+// ishlayveradi.
+//
+// Shu sababli bu hook har doim `false` qaytaradi — avto-modal o'chirilgan.
+export function useNeedsAutoSync(_opts: {
   onboarded: boolean;
   loggedIn: boolean;
   phone: string;
 }): boolean {
-  const { isSynced } = useBackendSyncCheck();
-  if (!opts.onboarded) return false;
-  if (!opts.loggedIn) return false;
-  if (!opts.phone) return false;
-  if (isSynced) return false;
-  return true;
+  return false;
 }
