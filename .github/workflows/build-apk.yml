@@ -54,6 +54,9 @@ jobs:
       - name: Build mobile web (Vite SPA)
         run: npm run build:mobile
 
+      - name: Generate Android icons from logo
+        run: npx @capacitor/assets generate --android --assetPath assets
+
       - name: Sync Capacitor (Android)
         run: npx cap sync android
 
