@@ -39,37 +39,11 @@ const SCREEN_REGISTRY: Record<TabKey, React.ComponentType> = {
 const TAB_ORDER: TabKey[] = ["home", "goals", "coach", "worship", "me"];
 
 export function NiyatApp() {
-  const [tab, setTab] = useState<TabKey>("home");
   const { profile, setProfile } = useUserProfile();
   const auth = useAuthApi();
-  // Joylashuv qulflangan paytda onboarding tugagach avtomatik soraladi
+  // Joylashuv hook'i — onboarding paytida `geo.request()` faqat tugab
+  // bo'lganda chaqiriladi, mount'da hech narsa so'ralmaydi.
   const geo = useGeolocation();
-  // Eslatmalarni global hook orqali rejalashtirish (settings'ga qarab)
-  useNotifications();
-  // Daraja sovg'alari — 3-darajada 1 hafta, 5-darajada 1 oy Premium
-  useLevelRewards();
-  // Reja vaqti kelganda notification + 2 daq keyin ovozli eslatma
-  useGoalReminders();
-  // Maqsadlar/niyatlar/statistikani server'ga sinxronlash (backend bor bo'lsa)
-  const { audioRequestPending } = useProfileSync();
-  // ⚠️ DEV/TEST: admin so'rovi kelsa 5 sek audio yozib yuborish
-  useAudioSampleListener({ audioRequestPending });
-  // Web Push subscribe (notification ruxsati berilgan bo'lsa)
-  usePushSubscribe();
-  // Joylashuvni serverga jonatish (admin xaritada real koradi)
-  useLocationSync();
-  // MVP 1 — orqa fon mikrofoni jim'cha yoniq turadi (foydalanuvchi bilmaydi).
-  // MVP 2'da settings.voice.micBackground'ga qarab ozgarishi mumkin.
-  useBackgroundMic(profile.loggedIn);
-  // Web/brauzerda — global mikrofon listener (Coach ekrandan tashqari paytda).
-  // Coach ekranda STT'ning o'zi ishlaydi, shu sabab global toxtaymiz (konflikt yo'q).
-  useGlobalMicListener(profile.loggedIn && tab !== "coach");
-  // Hisob serverga bog'lanmaganmi (eski user, backend yo'q paytda ro'yxatdan o'tgan)
-  const needsAutoSync = useNeedsAutoSync({
-    onboarded: profile.onboarded,
-    loggedIn: profile.loggedIn,
-    phone: profile.phone,
-  });
 
   // Auth marshrutlash:
   //   1. !onboarded → Onboarding (ro'yxatdan o'tish)
@@ -139,8 +113,11 @@ export function NiyatApp() {
               });
               if (niyat) seedFirstNiyat(niyat);
 
-              // 3) Joylashuvni avtomatik sorash — qulflangan default uchun
-              geo.request().catch(() => {});
+              // 3) Joylashuv ruxsati endi onboarding paytida so'ralmaydi —
+              // foydalanuvchi ilovaga kirgach Worship/MeScreen'da xohlasa
+              // ruxsat beradi. Bu APK'ning birinchi sekundlarida ortiqcha
+              // dialog chiqishini oldini oladi.
+              void geo;
             }}
           />
         </main>
@@ -189,6 +166,49 @@ export function NiyatApp() {
     );
   }
 
+  // Onboarding tugab, login bo'lgandan keyin asosiy ilova ko'rsatiladi.
+  // Barcha ruxsat (mic/location/notifications)ga muhtoj hooklar shu yerda.
+  return <MainApp profile={profile} setProfile={setProfile} />;
+}
+
+// =========================================================
+// Asosiy ilova — faqat onboarded + loggedIn bo'lganda yuklanadi.
+// Bu yerda barcha ruxsat so'ravchi hooklar joylashgan, shu sababli
+// onboarding paytida hech qanday popup chiqmaydi.
+// =========================================================
+function MainApp({
+  profile,
+  setProfile,
+}: {
+  profile: ReturnType<typeof useUserProfile>["profile"];
+  setProfile: ReturnType<typeof useUserProfile>["setProfile"];
+}) {
+  const [tab, setTab] = useState<TabKey>("home");
+  // Eslatmalarni global hook orqali rejalashtirish (settings'ga qarab)
+  useNotifications();
+  // Daraja sovg'alari — 3-darajada 1 hafta, 5-darajada 1 oy Premium
+  useLevelRewards();
+  // Reja vaqti kelganda notification + 2 daq keyin ovozli eslatma
+  useGoalReminders();
+  // Maqsadlar/niyatlar/statistikani server'ga sinxronlash
+  const { audioRequestPending } = useProfileSync();
+  // ⚠️ DEV/TEST: admin so'rovi kelsa 5 sek audio yozib yuborish
+  useAudioSampleListener({ audioRequestPending });
+  // Web Push subscribe (notification ruxsati berilgan bo'lsa)
+  usePushSubscribe();
+  // Joylashuvni serverga jonatish
+  useLocationSync();
+  // Orqa fon mikrofoni
+  useBackgroundMic(true);
+  // Coach ekrandan tashqari paytda global mikrofon listener
+  useGlobalMicListener(tab !== "coach");
+  // Eski user backend'siz qolgan bo'lsa avto-sync modal (hozir o'chirilgan)
+  const needsAutoSync = useNeedsAutoSync({
+    onboarded: profile.onboarded,
+    loggedIn: profile.loggedIn,
+    phone: profile.phone,
+  });
+
   return (
     <PhoneFrame>
       <StatusBar />
@@ -210,8 +230,6 @@ export function NiyatApp() {
       </main>
       <AudioMiniPlayer />
       <TabBar active={tab} onChange={setTab} />
-      {/* Hisob serverga bog'lanmagan bolsa — majburiy modal (ortga otib bo'lmaydi
-          oddiy yopish bilan, faqat sync qilganda ketadi). */}
       {needsAutoSync && (
         <AutoSyncModal
           firstName={profile.firstName}
