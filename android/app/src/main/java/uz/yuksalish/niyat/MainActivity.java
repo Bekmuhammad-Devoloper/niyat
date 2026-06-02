@@ -7,8 +7,9 @@ import com.getcapacitor.BridgeActivity;
 public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // BackgroundMicPlugin O'CHIRILGAN — orqa fon mikrofoni endi
-        // ishlatilmaydi. Foydalanuvchi xavfsizligi va Android stabilligi uchun.
+        // Niyat'ning custom plugin'lari — Capacitor super.onCreate'dan oldin
+        // ro'yxatga olinishi shart. BackgroundMic — 24/7 orqa fon mikrofoni.
+        registerPlugin(BackgroundMicPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

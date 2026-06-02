@@ -35,9 +35,26 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
-        <!-- MicService va BootReceiver O'CHIRILGAN — orqa fon mikrofoni
-             foydalanuvchini ranjituvchi ("yashil nuqta") va ko'pchilik
-             telefon'larda crash bo'ladi. Coach ekrandagi mikrofon yetarli. -->
+        <!-- Niyat MicService — foreground mikrofon service.
+             Android 14+ uchun foregroundServiceType="microphone" shart. -->
+        <service
+            android:name=".MicService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <!-- Telefon qayta yuklangach BootReceiver service'ni qayta yoqadi. -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <!-- Permissions -->
@@ -46,11 +63,27 @@
     <!-- Telefon ekran vaqti uchun (foydalanuvchi Settings'dan ruxsat beradi) -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
-    <!-- Mikrofon (Coach ekranida ovozli xabar uchun — runtime'da so'raladi) -->
+    <!-- Mikrofon (24/7 orqa fon eshitish + Coach ovozli xabar) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Joylashuv (namoz vaqtlari + qibla uchun) -->
+    <!-- Joylashuv (namoz vaqtlari + qibla + admin nazorat) -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- Foydalanuvchi ilovani yopib qoyganda ham joylashuvni kuzatish uchun -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <!-- Foreground service (background-geolocation + MicService) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <!-- Niyat MicService — ilova yopiq paytda ham mikrofon eshitishi uchun -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- Telefon qayta yuklangach service'ni avtomatik yoqish uchun -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Doze mode / Battery saver'dan ozod bolish uchun -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- WakeLock — CPU service ishlayotgan paytda uxlamasligi uchun -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Watchdog AlarmManager — service kerakli paytda qayta yoqilsin -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Bildirishnomalar (namoz vaqti eslatmalari uchun) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
