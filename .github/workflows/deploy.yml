@@ -40,7 +40,7 @@ jobs:
           command_timeout: 12m
           script: |
             set -e
-            cd ~/niyat
+            cd /home/bekmuhammad_devoloper/niyat
 
             echo "=== 1) Git yangilash ==="
             git fetch niyat
@@ -59,11 +59,11 @@ jobs:
             npm run build 2>&1 | tail -5
 
             echo "=== 4) Service restart ==="
-            sudo systemctl restart niyat
+            systemctl restart niyat
             sleep 8
 
             echo "=== 5) Health check ==="
-            STATUS=$(sudo systemctl is-active niyat)
+            STATUS=$(systemctl is-active niyat)
             echo "Service: $STATUS"
             if [ "$STATUS" != "active" ]; then
               echo "❌ Service active emas!"
