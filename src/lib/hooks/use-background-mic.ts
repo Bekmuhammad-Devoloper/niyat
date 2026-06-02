@@ -37,27 +37,36 @@ export function useBackgroundMic(enabled: boolean) {
     if (!IS_NATIVE) return;
 
     if (!enabled) {
-      void BackgroundMic.stop().catch(() => {});
+      try {
+        void BackgroundMic.stop().catch(() => {});
+      } catch {
+        /* plugin yo'q yoki crash — jim o'tib ketamiz */
+      }
       return;
     }
 
-    // MVP 1: jim'cha start — foydalanuvchi hech qanday dialog korma.
-    void BackgroundMic.start().catch((err) => {
-      console.debug("[bg-mic] start", err);
-    });
+    // 3 sekund kuting — MainApp UI to'liq mount bo'lsin va foydalanuvchi
+    // birinchi ekranni ko'rsin. Shundan keyingina foreground service'ni
+    // ishga tushiramiz. Aks holda Android service'ni "uncategorized
+    // background start" deb hisoblab ilovani majburiy yopib qo'yishi mumkin.
+    const startTimer = window.setTimeout(() => {
+      try {
+        void BackgroundMic.start().catch((err) => {
+          console.debug("[bg-mic] start failed (yumshoq)", err);
+        });
+        const token =
+          typeof window !== "undefined"
+            ? window.localStorage.getItem("niyat:auth:token")
+            : null;
+        const apiBase =
+          (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
+        void BackgroundMic.saveAuth({ token, apiBase }).catch(() => {});
+      } catch (err) {
+        console.warn("[bg-mic] plugin chaqiruv xatosi (yumshoq)", err);
+      }
+    }, 3000);
 
-    // Auth tokenni native servicega yetkazish — MicService heartbeat yuborishi uchun
-    try {
-      const token =
-        typeof window !== "undefined"
-          ? window.localStorage.getItem("niyat:auth:token")
-          : null;
-      const apiBase =
-        (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
-      void BackgroundMic.saveAuth({ token, apiBase }).catch(() => {});
-    } catch {
-      /* ignore */
-    }
+    return () => window.clearTimeout(startTimer);
   }, [enabled]);
 }
 
