@@ -60,6 +60,53 @@ function buildReminderMessage(firstName: string, goalTitle: string): string {
   return `Ey Muhammad sollallohu alayhi va sallam ummatidan ${name}, ${goalTitle} vazifasini bajaring. Bu sizning niyatingiz edi.`;
 }
 
+// Brauzer ichidagi tabiiy TTS — server /api/tts yo'q yoki ishlamasa (APK)
+// ham audio chiqsin uchun. Capacitor WebView (Chrome WebView) speechSynthesis
+// API'ni qo'llab-quvvatlaydi.
+function speakViaWebSpeech(text: string, lang: string = "tr-TR"): boolean {
+  if (typeof window === "undefined") return false;
+  const synth = window.speechSynthesis;
+  if (!synth) return false;
+  try {
+    synth.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    // O'zbekcha ovoz aksar qurilmalarda yo'q — turkcha eng yaqin
+    const voices = synth.getVoices();
+    const pick =
+      voices.find((v) => v.lang.startsWith("uz")) ||
+      voices.find((v) => v.lang.startsWith("tr")) ||
+      voices.find((v) => v.lang.startsWith("ru")) ||
+      voices.find((v) => v.lang.startsWith("en")) ||
+      voices[0];
+    if (pick) utter.voice = pick;
+    utter.lang = pick?.lang ?? lang;
+    utter.rate = 0.95;
+    utter.pitch = 1.05;
+    utter.volume = 1.0;
+    synth.speak(utter);
+    return true;
+  } catch (err) {
+    console.warn("[goal-reminders] webspeech fallback failed", err);
+    return false;
+  }
+}
+
+// Ovozli eslatmani ishonchli o'qib berish:
+//   1) Avval server TTS (sifatli ayol ovozi)
+//   2) Server xato bersa → brauzer ichidagi speechSynthesis (offline ham ishlaydi)
+async function speakReminder(
+  tts: ReturnType<typeof useCoachTTS>,
+  text: string,
+): Promise<void> {
+  try {
+    await tts.speak(text, FEMALE_VOICE);
+    return;
+  } catch (err) {
+    console.warn("[goal-reminders] server TTS failed, fallback to webspeech", err);
+  }
+  speakViaWebSpeech(text);
+}
+
 // localStorage'dan eng so'nggi goal ma'lumotini o'qiymiz — taymer ishlagan
 // paytdagi React state stale bo'lishi mumkin.
 function readFreshGoal(goalId: string): Goal | null {
@@ -200,6 +247,65 @@ export function useGoalReminders() {
     settings.notifications.goalVoiceReminderDelayMinutes,
   ]);
 
+  // ========== NATIVE: foreground'da ovozli o'qib berish ==========
+  // LocalNotifications faqat tovush chiqaradi — TTS audio chiqarmaydi.
+  // Ilova ochiq turganda followup eslatma kelganda matnni TTS bilan o'qiymiz.
+  useEffect(() => {
+    if (!IS_NATIVE) return;
+    if (!settings.notifications.goalVoiceReminderEnabled) return;
+
+    let receivedHandle: { remove: () => Promise<void> } | null = null;
+    let actionHandle: { remove: () => Promise<void> } | null = null;
+
+    (async () => {
+      try {
+        receivedHandle = await LocalNotifications.addListener(
+          "localNotificationReceived",
+          (notif) => {
+            const extra = (notif.extra ?? {}) as {
+              type?: string;
+              stage?: string;
+              goalId?: string;
+            };
+            if (extra.type !== "goal-reminder") return;
+            if (extra.stage !== "followup") return;
+            if (!extra.goalId) return;
+            const fresh = readFreshGoal(extra.goalId);
+            if (!fresh) return;
+            if (isCompletedToday(fresh)) return;
+            const message = buildReminderMessage(profile.firstName, fresh.title);
+            void speakReminder(tts, message);
+          },
+        );
+        // Foydalanuvchi notification'ga bosganda ham — TTS o'qib bersin
+        actionHandle = await LocalNotifications.addListener(
+          "localNotificationActionPerformed",
+          (action) => {
+            const extra = (action.notification.extra ?? {}) as {
+              type?: string;
+              stage?: string;
+              goalId?: string;
+            };
+            if (extra.type !== "goal-reminder") return;
+            if (!extra.goalId) return;
+            const fresh = readFreshGoal(extra.goalId);
+            if (!fresh) return;
+            if (isCompletedToday(fresh)) return;
+            const message = buildReminderMessage(profile.firstName, fresh.title);
+            void speakReminder(tts, message);
+          },
+        );
+      } catch (err) {
+        console.warn("[goal-reminders] addListener failed", err);
+      }
+    })();
+
+    return () => {
+      void receivedHandle?.remove();
+      void actionHandle?.remove();
+    };
+  }, [profile.firstName, settings.notifications.goalVoiceReminderEnabled, tts]);
+
   // ========== WEB / brauzer yo'l ==========
   // Ilova ochiq turganda — browser notification + TTS audio
   useEffect(() => {
@@ -250,9 +356,7 @@ export function useGoalReminders() {
           if (!fresh) return;
           if (isCompletedToday(fresh)) return;
           const message = buildReminderMessage(profile.firstName, g.title);
-          tts.speak(message, FEMALE_VOICE).catch((err) => {
-            console.warn("[goal-reminders] TTS failed", err);
-          });
+          void speakReminder(tts, message);
         }, delayMs);
         timersRef.current.push(followupId);
       }, delay);

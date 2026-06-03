@@ -80,7 +80,7 @@ export function useGeolocation() {
           console.warn("[geolocation]", err);
           resolve(false);
         },
-        { timeout: 15000, maximumAge: 1000 * 60 * 60, enableHighAccuracy: false },
+        { timeout: 15000, maximumAge: 1000 * 60 * 30, enableHighAccuracy: true },
       );
     });
   }, [update]);

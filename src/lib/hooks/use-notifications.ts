@@ -1,14 +1,54 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Capacitor } from "@capacitor/core";
+import { LocalNotifications } from "@capacitor/local-notifications";
 import { useSettings } from "./use-settings";
 import { usePrayerTimes } from "./use-prayer-times";
 import { getTodaySunnat } from "@/lib/data/sunnats";
 import { findNearbyMosques, formatDistance, mapsLink } from "@/lib/api/overpass";
 import { playAdhanAudio } from "@/lib/audio/quran-player";
 
+const IS_NATIVE = Capacitor.isNativePlatform();
+
 // Default azon URL — Mishary Rashid Alafasy. Foydalanuvchi sozlamalarda
 // o'zgartirishi mumkin. CDN'da CORS ruxsat etilgan bo'lishi shart.
 const DEFAULT_ADHAN_URL =
   "https://www.islamcan.com/audio/adhan/azan2.mp3";
+
+// Azon notification channel — namoz vaqtidan oldin chiqadi. Eng yuqori
+// muhimlik darajasi, qulflangan ekranda ham ko'rinadi, alarm uslubidagi tovush.
+const ADHAN_CHANNEL_ID = "adhan-prayer-urgent";
+let adhanChannelCreated = false;
+async function ensureAdhanChannel(): Promise<void> {
+  if (!IS_NATIVE || adhanChannelCreated) return;
+  try {
+    await LocalNotifications.createChannel({
+      id: ADHAN_CHANNEL_ID,
+      name: "Azon eslatmalari",
+      description: "Namoz vaqtidan oldin azon — bezovta rejimida ham yangraydi",
+      importance: 5, // MAX — heads-up + alarm sound
+      visibility: 1, // PUBLIC — qulflangan ekranda
+      sound: "default",
+      vibration: true,
+      lights: true,
+      lightColor: "#D4B86A",
+    });
+    adhanChannelCreated = true;
+  } catch (err) {
+    console.warn("[notifications] adhan channel create failed", err);
+  }
+}
+
+// Barqaror raqamli ID — namoz nomidan
+function adhanNotifId(prayerName: string, dayOffset: number = 0): number {
+  let h = 0;
+  const key = `adhan-${prayerName}-${dayOffset}`;
+  for (let i = 0; i < key.length; i++) {
+    h = (h << 5) - h + key.charCodeAt(i);
+    h |= 0;
+  }
+  // 0x60000000 prefix — boshqa notification ID'lari bilan to'qnashmasligi uchun
+  return 0x60000000 | (Math.abs(h) & 0x0fffffff);
+}
 
 export type NotificationPermissionState = "default" | "granted" | "denied" | "unsupported";
 
@@ -250,12 +290,12 @@ export function useNotifications() {
     notify,
   ]);
 
-  // Azon scheduler — namozdan N daqiqa oldin avtomatik audio + notification.
-  // Ilova ochiq bo'lganda ishlaydi. Audio loop bo'lib aytaveradi (foydalanuvchi
-  // mini player'dan to'xtatmaguncha).
+  // ========== Azon scheduler (WEB) ==========
+  // Ilova ochiq bo'lganda — setTimeout + audio. APK'da pastdagi native yo'l ishlatiladi.
   const adhanTimersRef = useRef<number[]>([]);
   const adhanFiredRef = useRef<Set<string>>(new Set());
   useEffect(() => {
+    if (IS_NATIVE) return; // native rejim pastda alohida useEffect'da
     // Avval barcha taymerlarni tozalash
     adhanTimersRef.current.forEach((id) => window.clearTimeout(id));
     adhanTimersRef.current = [];
@@ -305,6 +345,138 @@ export function useNotifications() {
     permission,
     notify,
   ]);
+
+  // ========== Azon scheduler (NATIVE / Capacitor APK) ==========
+  // Telefon yopiq bo'lganda ham ishlashi uchun LocalNotifications orqali
+  // OS'ga jadval yuklatamiz. Notification yangraganida (foydalanuvchi telefon
+  // qo'lida) — listener azon audio'sini ijro etadi.
+  useEffect(() => {
+    if (!IS_NATIVE) return;
+    if (!settings.notifications.adhanEnabled || !prayers) return;
+
+    let cancelled = false;
+    (async () => {
+      // Ruxsat so'rash
+      try {
+        const perm = await LocalNotifications.requestPermissions();
+        if (perm.display !== "granted") return;
+      } catch (err) {
+        console.warn("[adhan-native] permission failed", err);
+        return;
+      }
+      if (cancelled) return;
+
+      await ensureAdhanChannel();
+      if (cancelled) return;
+
+      // Eski jadvallarni tozalash (faqat adhan turidagi)
+      try {
+        const pending = await LocalNotifications.getPending();
+        const toCancel = pending.notifications
+          .filter((n) => {
+            const ex = n.extra as { type?: string } | null | undefined;
+            return ex?.type === "adhan-prayer";
+          })
+          .map((n) => ({ id: n.id }));
+        if (toCancel.length > 0) {
+          await LocalNotifications.cancel({ notifications: toCancel });
+        }
+      } catch (err) {
+        console.warn("[adhan-native] cancel pending failed", err);
+      }
+      if (cancelled) return;
+
+      const leadMin = Math.max(0, settings.notifications.adhanLeadMinutes);
+      const now = new Date();
+
+      const list: Array<{
+        id: number;
+        title: string;
+        body: string;
+        schedule: { at: Date; allowWhileIdle?: boolean };
+        channelId?: string;
+        sound?: string;
+        extra: Record<string, string>;
+      }> = [];
+
+      for (const p of prayers) {
+        const t = parseHMM(p.time, now);
+        const fireAt = new Date(t.getTime() - leadMin * 60 * 1000);
+        if (fireAt.getTime() <= now.getTime()) continue;
+        list.push({
+          id: adhanNotifId(p.name, 0),
+          title: `${p.name} namoziga ${leadMin} daqiqa qoldi`,
+          body: `Vaqti: ${p.time} — azon ijro etiladi`,
+          schedule: { at: fireAt, allowWhileIdle: true },
+          channelId: ADHAN_CHANNEL_ID,
+          sound: "default",
+          extra: {
+            type: "adhan-prayer",
+            prayerName: p.name,
+            prayerTime: p.time,
+          },
+        });
+      }
+
+      if (list.length === 0) return;
+      try {
+        await LocalNotifications.schedule({ notifications: list });
+      } catch (err) {
+        console.warn("[adhan-native] schedule failed", err);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    prayers,
+    settings.notifications.adhanEnabled,
+    settings.notifications.adhanLeadMinutes,
+  ]);
+
+  // ========== Azon listener (NATIVE) ==========
+  // Notification kelganda — agar ilova ochiq bo'lsa, azon audio'sini ijro etamiz.
+  // Foydalanuvchi notification'ga bossa ham — azon ijro etiladi.
+  useEffect(() => {
+    if (!IS_NATIVE) return;
+    if (!settings.notifications.adhanEnabled) return;
+
+    const url = settings.notifications.adhanUrl || DEFAULT_ADHAN_URL;
+    let recvHandle: { remove: () => Promise<void> } | null = null;
+    let actHandle: { remove: () => Promise<void> } | null = null;
+
+    (async () => {
+      try {
+        recvHandle = await LocalNotifications.addListener(
+          "localNotificationReceived",
+          (notif) => {
+            const ex = (notif.extra ?? {}) as { type?: string; prayerName?: string };
+            if (ex.type !== "adhan-prayer") return;
+            playAdhanAudio(url, `${ex.prayerName ?? "Azon"} azoni`);
+          },
+        );
+        actHandle = await LocalNotifications.addListener(
+          "localNotificationActionPerformed",
+          (action) => {
+            const ex = (action.notification.extra ?? {}) as {
+              type?: string;
+              prayerName?: string;
+            };
+            if (ex.type !== "adhan-prayer") return;
+            playAdhanAudio(url, `${ex.prayerName ?? "Azon"} azoni`);
+          },
+        );
+      } catch (err) {
+        console.warn("[adhan-native] listener failed", err);
+      }
+    })();
+
+    return () => {
+      void recvHandle?.remove();
+      void actHandle?.remove();
+    };
+  }, [settings.notifications.adhanEnabled, settings.notifications.adhanUrl]);
 
   return { permission, request, notify, supported: permission !== "unsupported" };
 }

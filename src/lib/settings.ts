@@ -128,9 +128,9 @@ export const DEFAULT_SETTINGS: Settings = {
     niyatPersistHours: 3,
     fridayMosqueReminder: true, // default yoqilgan — juma namozi muhim
     fridayMosqueHour: 12,
-    adhanEnabled: false, // default o'chirilgan
+    adhanEnabled: true, // default yoqilgan — namoz vaqtidan oldin azon eshitilsin
     adhanUrl: "",
-    adhanLeadMinutes: 5,
+    adhanLeadMinutes: 10,
     goalVoiceReminderEnabled: true, // default yoqilgan
     goalVoiceReminderDelayMinutes: 2,
   },
