@@ -346,9 +346,9 @@ export function NotificationsSheet({ open, onClose }: { open: boolean; onClose: 
                 className="w-full bg-elevated border border-border rounded-md px-3 py-2 text-[12px] text-foreground placeholder:text-tertiary outline-none focus:border-primary/60"
               />
               <p className="mt-1 text-[10px] text-tertiary leading-relaxed">
-                Eslatma: brauzer/PWA telefon bezovta rejimini yenmaydi (OS chegarasi).
-                Lekin ilova ochiq bo'lsa, audio loop bo'lib aytaveradi — Mini player'dan
-                to'xtatasiz.
+                APK telefon ilovasida — namoz vaqtidan oldin tizim bildirishnomasi
+                yangraydi (ilova yopiq bo'lsa ham). Ilovani ochsangiz azon audio'si
+                loop bo'lib aytaveradi — Mini player'dan to'xtatasiz.
               </p>
             </div>
           </div>
@@ -2574,120 +2574,252 @@ export function AsmaSheet({ open, onClose }: { open: boolean; onClose: () => voi
 }
 
 // =========================================================
-// Ekran vaqti — manual kiritish + tushuntirish
+// Ekran vaqti — bir martagina qulflanadigan manual kiritish + ilovalar bo'yicha tafsilot
 // =========================================================
+const NIYAT_SCREEN_LABELS: Record<
+  "home" | "goals" | "coach" | "worship" | "me",
+  { label: string; emoji: string }
+> = {
+  home: { label: "Bosh sahifa", emoji: "🏠" },
+  goals: { label: "Maqsadlar", emoji: "🎯" },
+  coach: { label: "Murabbiy", emoji: "💬" },
+  worship: { label: "Ibodat", emoji: "🕌" },
+  me: { label: "Profil", emoji: "👤" },
+};
+
+function fmtMin(min: number): string {
+  const m = Math.max(0, Math.round(min));
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (h === 0) return `${r}d`;
+  if (r === 0) return `${h}s`;
+  return `${h}s ${r}d`;
+}
+
 export function ScreenTimeSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const t = useAppTime();
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
 
-  // Sheet ochilganda joriy qiymatdan boshlash
+  // Sheet ochilganda — agar qulflanmagan bo'lsa, oxirgi avto qiymatdan
+  // boshlaymiz; qulflangan bo'lsa input ko'rinmaydi.
   useEffect(() => {
     if (!open) return;
-    const total = t.todayMin;
+    if (t.isLocked) return;
+    const total = Math.max(t.autoTrackedMin, t.todayMin);
     setHours(Math.floor(total / 60));
     setMinutes(total % 60);
-  }, [open, t.todayMin]);
+  }, [open, t.todayMin, t.autoTrackedMin, t.isLocked]);
 
   const save = () => {
     const total = hours * 60 + minutes;
+    if (total <= 0) return;
     t.setManual(total);
-    toast.success("Ekran vaqti saqlandi");
-    onClose();
+    toast.success("Ekran vaqti saqlandi va kun yakuniga qadar qulflandi");
   };
 
-  const clearManual = () => {
-    t.setManual(null);
-    toast.info("Avtomatik (ilova sessiyasi) qaytarildi");
-    onClose();
-  };
+  // Ekranlar bo'yicha jami va per-screen taqsimot
+  const screens = (
+    Object.keys(NIYAT_SCREEN_LABELS) as Array<keyof typeof NIYAT_SCREEN_LABELS>
+  )
+    .map((k) => ({
+      key: k,
+      label: NIYAT_SCREEN_LABELS[k].label,
+      emoji: NIYAT_SCREEN_LABELS[k].emoji,
+      min: Math.max(0, t.perScreen[k] ?? 0),
+    }))
+    .sort((a, b) => b.min - a.min);
+
+  const niyatTotalMin = screens.reduce((s, x) => s + x.min, 0);
+  const maxScreenMin = Math.max(1, ...screens.map((s) => s.min));
+
+  const lockedDate = t.lockedAt ? new Date(t.lockedAt) : null;
 
   return (
     <BottomSheet open={open} onClose={onClose} title="Ekran vaqti">
       <div className="space-y-4">
-        {/* Tushuntirish */}
-        <div className="rounded-2xl bg-card border border-border p-4">
-          <p className="text-[13px] text-foreground leading-relaxed">
-            Web brauzer butun telefon ekran vaqtini avtomatik aniqlay olmaydi —
-            bu faqat native Android/iOS ilovada (MVP 2'da) mumkin bo'ladi.
-          </p>
-          <p className="mt-2 text-[12px] text-muted-foreground leading-relaxed">
-            Hozir telefon sozlamalaridan ko'rib, qo'lda kiriting. Yoki ilova
-            avtomatik hisoblagan sessiya vaqtidan foydalaning.
-          </p>
-        </div>
-
-        {/* Joriy qiymat */}
-        <div className="rounded-2xl bg-card border border-border p-4">
-          <p className="text-[10px] uppercase tracking-wider text-tertiary">
-            Joriy ko'rinish
-          </p>
-          <p className="mt-1 text-[22px] font-semibold tabular text-foreground">
-            {t.formatted}{" "}
-            <span className="text-[11px] font-normal text-tertiary">
-              ({t.isManual ? "qo'lda" : "avtomatik"})
-            </span>
-          </p>
-          {!t.isManual && (
-            <p className="mt-1 text-[11px] text-tertiary">
-              Bu — ilova sessiyasi vaqti, telefonning butun ekran vaqti emas.
+        {/* Bugungi jami — qulflangan yoki avtomatik */}
+        <div
+          className={`rounded-2xl p-5 border ${
+            t.isLocked
+              ? "bg-primary/5 border-primary/30"
+              : "bg-card border-border"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-tertiary">
+                Bugun jami
+              </p>
+              <p className="mt-1 text-[28px] font-semibold tabular text-foreground leading-none">
+                {t.formatted}
+              </p>
+              <p className="mt-2 text-[11px] text-tertiary">
+                {t.isLocked
+                  ? `Siz qo'lda kiritdingiz · qulflangan`
+                  : `Niyat ilovasidagi sessiya vaqti (avtomatik)`}
+              </p>
+            </div>
+            {t.isLocked && (
+              <div className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-primary/15 text-primary text-[10px] font-semibold uppercase tracking-wider">
+                <Lock size={11} />
+                Qulf
+              </div>
+            )}
+          </div>
+          {lockedDate && (
+            <p className="mt-3 text-[10px] text-tertiary">
+              Saqlangan:{" "}
+              {lockedDate.toLocaleTimeString("uz-UZ", {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}{" "}
+              · ertaga avtomatik yangilanadi
             </p>
           )}
         </div>
 
-        {/* Manual input */}
+        {/* Ilovalar/ekranlar bo'yicha taqsimot */}
         <div className="rounded-2xl bg-card border border-border p-4">
-          <p className="text-[12px] text-tertiary mb-3">
-            Telefon ekran vaqtini kiriting
-          </p>
-          <div className="flex items-end gap-3">
-            <div className="flex-1">
-              <p className="text-[10px] uppercase text-tertiary mb-1">Soat</p>
-              <input
-                type="number"
-                min={0}
-                max={24}
-                value={hours}
-                onChange={(e) =>
-                  setHours(Math.max(0, Math.min(24, Number(e.target.value) || 0)))
-                }
-                className="w-full bg-background/40 border border-border rounded-lg px-3 py-2.5 text-[16px] text-foreground tabular outline-none focus:border-primary/60"
-              />
-            </div>
-            <span className="text-[20px] text-tertiary pb-2">:</span>
-            <div className="flex-1">
-              <p className="text-[10px] uppercase text-tertiary mb-1">Daqiqa</p>
-              <input
-                type="number"
-                min={0}
-                max={59}
-                value={minutes}
-                onChange={(e) =>
-                  setMinutes(Math.max(0, Math.min(59, Number(e.target.value) || 0)))
-                }
-                className="w-full bg-background/40 border border-border rounded-lg px-3 py-2.5 text-[16px] text-foreground tabular outline-none focus:border-primary/60"
-              />
-            </div>
+          <div className="flex items-baseline justify-between mb-3">
+            <p className="text-[12px] font-semibold text-foreground uppercase tracking-wider">
+              Qaysi ekranlarda
+            </p>
+            <p className="text-[10px] text-tertiary tabular">
+              {fmtMin(niyatTotalMin)} jami
+            </p>
           </div>
 
-          <button
-            type="button"
-            onClick={save}
-            disabled={hours === 0 && minutes === 0}
-            className="mt-4 w-full py-3 rounded-xl bg-primary text-primary-foreground text-[14px] font-semibold disabled:opacity-40 active:scale-[0.98] transition"
-          >
-            Saqlash
-          </button>
-          {t.isManual && (
+          {niyatTotalMin < 0.5 ? (
+            <p className="text-[12px] text-tertiary leading-relaxed py-4 text-center">
+              Hali ma'lumot to'planmagan. Ilovani biroz ishlatib turing —
+              har 30 soniyada yangilanadi.
+            </p>
+          ) : (
+            <ul className="space-y-2.5">
+              {screens.map((s) => {
+                const pct = niyatTotalMin > 0 ? (s.min / niyatTotalMin) * 100 : 0;
+                const barPct = (s.min / maxScreenMin) * 100;
+                const isActive = t.activeScreen === s.key;
+                return (
+                  <li key={s.key} className="space-y-1">
+                    <div className="flex items-center justify-between text-[12px]">
+                      <span className="flex items-center gap-2 text-foreground">
+                        <span className="text-[14px]" aria-hidden>
+                          {s.emoji}
+                        </span>
+                        <span>{s.label}</span>
+                        {isActive && (
+                          <span className="text-[9px] uppercase tracking-wider text-primary">
+                            · faol
+                          </span>
+                        )}
+                      </span>
+                      <span className="tabular text-tertiary">
+                        {fmtMin(s.min)}{" "}
+                        <span className="text-[10px]">
+                          ({Math.round(pct)}%)
+                        </span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-elevated overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-[width] duration-500 ${
+                          isActive ? "bg-primary" : "bg-primary/55"
+                        }`}
+                        style={{ width: `${Math.max(2, barPct)}%` }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+
+          <p className="mt-3 text-[10px] text-tertiary leading-relaxed">
+            Eslatma: bu — faqat Niyat ilovasi ichidagi taqsimot. Boshqa
+            ilovalar (Instagram, TikTok va h.k.) vaqti telefon sozlamalaridan
+            ko'riladi — yuqorida shu jamini kiritasiz.
+          </p>
+        </div>
+
+        {/* Manual input — faqat qulflanmagan bo'lsa */}
+        {!t.isLocked ? (
+          <div className="rounded-2xl bg-card border border-border p-4">
+            <div className="flex items-start gap-2 mb-3">
+              <Clock size={14} className="text-primary mt-0.5 shrink-0" />
+              <div>
+                <p className="text-[13px] text-foreground font-medium">
+                  Telefon ekran vaqtini kiriting
+                </p>
+                <p className="text-[11px] text-tertiary mt-0.5 leading-relaxed">
+                  Telefon sozlamalari → Ekran vaqti'dan ko'ring. Bir marta
+                  saqlasangiz, kun oxirigacha o'zgartirib bo'lmaydi.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-end gap-3">
+              <div className="flex-1">
+                <p className="text-[10px] uppercase text-tertiary mb-1">Soat</p>
+                <input
+                  type="number"
+                  min={0}
+                  max={24}
+                  value={hours}
+                  onChange={(e) =>
+                    setHours(Math.max(0, Math.min(24, Number(e.target.value) || 0)))
+                  }
+                  className="w-full bg-background/40 border border-border rounded-lg px-3 py-2.5 text-[16px] text-foreground tabular outline-none focus:border-primary/60"
+                />
+              </div>
+              <span className="text-[20px] text-tertiary pb-2">:</span>
+              <div className="flex-1">
+                <p className="text-[10px] uppercase text-tertiary mb-1">Daqiqa</p>
+                <input
+                  type="number"
+                  min={0}
+                  max={59}
+                  value={minutes}
+                  onChange={(e) =>
+                    setMinutes(Math.max(0, Math.min(59, Number(e.target.value) || 0)))
+                  }
+                  className="w-full bg-background/40 border border-border rounded-lg px-3 py-2.5 text-[16px] text-foreground tabular outline-none focus:border-primary/60"
+                />
+              </div>
+            </div>
+
             <button
               type="button"
-              onClick={clearManual}
-              className="mt-2 w-full py-2.5 text-[12px] text-tertiary hover:text-foreground transition"
+              onClick={save}
+              disabled={hours === 0 && minutes === 0}
+              className="mt-4 w-full py-3 rounded-xl bg-primary text-primary-foreground text-[14px] font-semibold disabled:opacity-40 active:scale-[0.98] transition inline-flex items-center justify-center gap-2"
             >
-              Avtomatik (ilova sessiyasi) ga qaytarish
+              <Lock size={14} />
+              Saqlash va kun yakuniga qulflash
             </button>
-          )}
-        </div>
+            <p className="mt-2 text-[10px] text-tertiary text-center leading-relaxed">
+              Halol bo'lib hisobot bering — bu o'zingiz uchun.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-2xl bg-elevated/50 border border-border p-4">
+            <div className="flex items-start gap-3">
+              <div className="h-9 w-9 rounded-full bg-primary/15 flex items-center justify-center shrink-0">
+                <Lock size={15} className="text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="text-[13px] text-foreground font-semibold">
+                  Bugungi qiymat qulflangan
+                </p>
+                <p className="mt-1 text-[11px] text-tertiary leading-relaxed">
+                  Halollik prinsipi: bir marta kiritilgan qiymat shu kun
+                  oxirigacha o'zgarmas. Ertangi kunda yangidan kiritasiz.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <p className="text-[11px] text-tertiary text-center font-serif italic">
           “Vaqt — Allohning ne'mati, behuda sarflama.”

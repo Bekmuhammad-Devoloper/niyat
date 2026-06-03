@@ -577,18 +577,28 @@ export function KaabaSheet({
                             />
                             {/* Pastki — orqa */}
                             <div className="absolute bottom-0 left-0 right-0 h-1/2 bg-tertiary/40 rounded-b-full" />
-                            {/* Ka'ba belgisi tepada */}
+                            {/* Ka'ba belgisi — arabcha "الكعبة" yozuvi.
+                                Qiblaga to'g'rilanganda yashilga aylanadi
+                                va porlaydi. Sodda, nafis va o'qib bo'ladigan. */}
                             <div
-                              className={`absolute -top-4 left-1/2 -translate-x-1/2 h-7 w-7 rounded-md bg-foreground flex items-center justify-center transition-colors ${
-                                isAligned
-                                  ? "border-2 border-emerald-400"
-                                  : "border-2 border-primary"
+                              className={`absolute -top-6 left-1/2 -translate-x-1/2 transition-all duration-300 ${
+                                isAligned ? "scale-110" : "scale-100"
                               }`}
+                              style={{
+                                filter: isAligned
+                                  ? "drop-shadow(0 0 5px rgba(52,211,153,0.55))"
+                                  : "drop-shadow(0 1px 2px rgba(0,0,0,0.6))",
+                              }}
+                              dir="rtl"
                             >
                               <span
-                                className={`text-[10px] font-bold transition-colors ${accentColor}`}
+                                className={`font-arabic text-quran text-[13px] leading-none font-semibold tracking-tight transition-colors ${
+                                  isAligned
+                                    ? "text-emerald-400"
+                                    : "text-primary"
+                                }`}
                               >
-                                ۝
+                                ٱلْكَعْبَة
                               </span>
                             </div>
                           </div>

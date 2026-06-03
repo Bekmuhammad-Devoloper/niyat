@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
 import { PhoneFrame } from "./PhoneFrame";
 import { StatusBar } from "./StatusBar";
@@ -27,6 +27,7 @@ import { useBackgroundMic } from "@/lib/hooks/use-background-mic";
 import { useGlobalMicListener } from "@/lib/hooks/use-global-mic-listener";
 import { useNeedsAutoSync } from "@/lib/hooks/use-backend-sync-check";
 import { useSettings } from "@/lib/hooks/use-settings";
+import { useAppTime } from "@/lib/hooks/use-app-time";
 import { AutoSyncModal } from "./AutoSyncModal";
 
 const SCREEN_REGISTRY: Record<TabKey, React.ComponentType> = {
@@ -186,6 +187,23 @@ function MainApp({
 }) {
   const [tab, setTab] = useState<TabKey>("home");
   const { settings: micSettings } = useSettings();
+  // Ekran vaqti kuzatuvi — joriy tabni hookga uzatamiz, u shu ekranga
+  // sarflangan daqiqalarni alohida saqlaydi.
+  const appTime = useAppTime();
+  useEffect(() => {
+    appTime.setActiveScreen(tab);
+  }, [tab, appTime]);
+  // Namoz vaqtlari aniq bo'lishi uchun joylashuv kerak — ilova birinchi
+  // ochilganda avtomatik so'rab olamiz (faqat agar hali sozlanmagan bo'lsa).
+  const geoAuto = useGeolocation();
+  useEffect(() => {
+    if (geoAuto.location) return; // allaqachon bor — qayta so'ramaymiz
+    if (geoAuto.status === "requesting") return;
+    // Telefonda APK ishlasa, ruxsat dialogi chiqadi va shu user'ga 1 marta ko'rsatiladi.
+    void geoAuto.request();
+    // Faqat mount'da, hech qanday qaytarib so'rov yo'q
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Eslatmalarni global hook orqali rejalashtirish (settings'ga qarab)
   useNotifications();
   // Daraja sovg'alari — 3-darajada 1 hafta, 5-darajada 1 oy Premium
