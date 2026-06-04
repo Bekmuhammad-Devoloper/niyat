@@ -307,6 +307,9 @@ export function useNotifications() {
     const now = new Date();
     const todayKey = now.toISOString().slice(0, 10);
 
+    const leadMin = settings.notifications.adhanLeadMinutes;
+    const isAtExactTime = leadMin === 0;
+
     for (const p of prayers) {
       // Bugun shu namozning azoni allaqachon chalin'gan bo'lsa — o'tkazib yuboramiz
       const fireKey = `${todayKey}:${p.name}`;
@@ -321,13 +324,17 @@ export function useNotifications() {
           // 1) Notification — telefon blok ekranida ham ko'rinadi
           if (permission === "granted") {
             notify(
-              `${p.name} namoziga ${settings.notifications.adhanLeadMinutes} daqiqa qoldi`,
-              "Azon eshitilmoqda — to'xtatmaguningizcha davom etadi",
+              isAtExactTime
+                ? `${p.name} vaqti — azon`
+                : `${p.name} namoziga ${leadMin} daqiqa qoldi`,
+              isAtExactTime
+                ? "Azon ijro etilmoqda"
+                : "Azon eshitilmoqda — to'xtatmaguningizcha davom etadi",
               { tag: `adhan-${p.name}` },
             );
           }
-          // 2) Audio — loop bo'lib ijro etiladi
-          playAdhanAudio(url, `${p.name} azoni`);
+          // 2) Audio — aynan vaqtida bir marta; lead bilan bo'lsa loop
+          playAdhanAudio(url, `${p.name} azoni`, /* loop */ !isAtExactTime);
         }, delay);
         adhanTimersRef.current.push(id);
       }
@@ -399,14 +406,20 @@ export function useNotifications() {
         extra: Record<string, string>;
       }> = [];
 
+      const isAtExactTime = leadMin === 0;
+
       for (const p of prayers) {
         const t = parseHMM(p.time, now);
         const fireAt = new Date(t.getTime() - leadMin * 60 * 1000);
         if (fireAt.getTime() <= now.getTime()) continue;
         list.push({
           id: adhanNotifId(p.name, 0),
-          title: `${p.name} namoziga ${leadMin} daqiqa qoldi`,
-          body: `Vaqti: ${p.time} — azon ijro etiladi`,
+          title: isAtExactTime
+            ? `${p.name} vaqti — azon`
+            : `${p.name} namoziga ${leadMin} daqiqa qoldi`,
+          body: isAtExactTime
+            ? `Soat ${p.time} — azon ijro etiladi`
+            : `Vaqti: ${p.time} — azon ijro etiladi`,
           schedule: { at: fireAt, allowWhileIdle: true },
           channelId: ADHAN_CHANNEL_ID,
           sound: "default",
@@ -443,6 +456,7 @@ export function useNotifications() {
     if (!settings.notifications.adhanEnabled) return;
 
     const url = settings.notifications.adhanUrl || DEFAULT_ADHAN_URL;
+    const loop = settings.notifications.adhanLeadMinutes !== 0;
     let recvHandle: { remove: () => Promise<void> } | null = null;
     let actHandle: { remove: () => Promise<void> } | null = null;
 
@@ -453,7 +467,7 @@ export function useNotifications() {
           (notif) => {
             const ex = (notif.extra ?? {}) as { type?: string; prayerName?: string };
             if (ex.type !== "adhan-prayer") return;
-            playAdhanAudio(url, `${ex.prayerName ?? "Azon"} azoni`);
+            playAdhanAudio(url, `${ex.prayerName ?? "Azon"} azoni`, loop);
           },
         );
         actHandle = await LocalNotifications.addListener(
@@ -464,7 +478,7 @@ export function useNotifications() {
               prayerName?: string;
             };
             if (ex.type !== "adhan-prayer") return;
-            playAdhanAudio(url, `${ex.prayerName ?? "Azon"} azoni`);
+            playAdhanAudio(url, `${ex.prayerName ?? "Azon"} azoni`, loop);
           },
         );
       } catch (err) {
@@ -476,7 +490,11 @@ export function useNotifications() {
       void recvHandle?.remove();
       void actHandle?.remove();
     };
-  }, [settings.notifications.adhanEnabled, settings.notifications.adhanUrl]);
+  }, [
+    settings.notifications.adhanEnabled,
+    settings.notifications.adhanUrl,
+    settings.notifications.adhanLeadMinutes,
+  ]);
 
   return { permission, request, notify, supported: permission !== "unsupported" };
 }

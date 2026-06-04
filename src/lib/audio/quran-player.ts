@@ -99,11 +99,13 @@ export function playQuranAudio(url: string, surah: PlayingSurah): void {
   notify();
 }
 
-// Azon ijro qilish — namoz vaqtidan oldin avtomatik chaqiriladi.
-// Loop bo'lib aytaveradi (siz to'xtatmaguncha).
+// Azon ijro qilish — namoz vaqti kelganda chaqiriladi.
+// Default: bir marta ijro (oxirigacha o'qiydi). loop=true desangiz — siz
+// to'xtatmaguncha takrorlaydi.
 export function playAdhanAudio(
   url: string,
   prayerName: string = "Azon",
+  loop: boolean = false,
 ): void {
   if (!url) {
     console.warn("[adhan] URL bo'sh — sozlamalarda kiriting");
@@ -115,7 +117,7 @@ export function playAdhanAudio(
     arabic: "أذان",
     latin: prayerName,
     reciterName: "Azon",
-    loop: true,
+    loop,
   });
 }
 

@@ -56,6 +56,7 @@ import { useSunnatSimplify } from "@/lib/hooks/use-sunnat-simplify";
 import { useQuranSurah, useQuranChapters, useReciters } from "@/lib/hooks/use-quran-surah";
 import { useQuranPlayer } from "@/lib/audio/quran-player";
 import { DEFAULT_RECITER_ID, POPULAR_RECITERS } from "@/lib/api/quran";
+import { ISLOMUZ_REGIONS } from "@/lib/api/islomapi";
 import { useAsmaProgress } from "@/lib/hooks/use-asma";
 import { useAppTime } from "@/lib/hooks/use-app-time";
 import { CATEGORY_LABELS, type Sunnat, type SunnatCategory } from "@/lib/data/sunnats";
@@ -288,7 +289,11 @@ export function NotificationsSheet({ open, onClose }: { open: boolean; onClose: 
         <Row
           icon={<Volume2 size={16} className="text-primary" />}
           title="Avtomatik azon"
-          subtitle={`Namozdan ${n.adhanLeadMinutes} daqiqa oldin · loop bo'lib aytaveradi`}
+          subtitle={
+            n.adhanLeadMinutes === 0
+              ? "Aynan namoz vaqtida bir marta chaqiradi"
+              : `Namozdan ${n.adhanLeadMinutes} daqiqa oldin · loop bo'lib aytaveradi`
+          }
         >
           <Toggle
             checked={n.adhanEnabled}
@@ -309,27 +314,36 @@ export function NotificationsSheet({ open, onClose }: { open: boolean; onClose: 
         {n.adhanEnabled && (
           <div className="rounded-2xl bg-card border border-border p-4 space-y-3">
             <div>
-              <p className="text-[12px] text-tertiary mb-2">Necha daqiqa oldin</p>
-              <div className="grid grid-cols-4 gap-2">
-                {[3, 5, 10, 15].map((m) => (
+              <p className="text-[12px] text-tertiary mb-2">Qachon chaqirsin</p>
+              <div className="grid grid-cols-5 gap-2">
+                {[
+                  { v: 0, label: "Aynan" },
+                  { v: 3, label: "3 daq" },
+                  { v: 5, label: "5 daq" },
+                  { v: 10, label: "10 daq" },
+                  { v: 15, label: "15 daq" },
+                ].map((opt) => (
                   <button
-                    key={m}
+                    key={opt.v}
                     type="button"
                     onClick={() =>
                       update({
-                        notifications: { ...n, adhanLeadMinutes: m },
+                        notifications: { ...n, adhanLeadMinutes: opt.v },
                       })
                     }
-                    className={`py-2 rounded-lg text-[13px] transition ${
-                      n.adhanLeadMinutes === m
+                    className={`py-2 rounded-lg text-[12px] transition ${
+                      n.adhanLeadMinutes === opt.v
                         ? "bg-primary text-primary-foreground font-semibold"
                         : "bg-elevated text-foreground"
                     }`}
                   >
-                    {m} daq
+                    {opt.label}
                   </button>
                 ))}
               </div>
+              <p className="mt-2 text-[10px] text-tertiary">
+                "Aynan" — namoz vaqti kelganda bir marta chaqiradi.
+              </p>
             </div>
             <div>
               <label htmlFor="adhan-url" className="block text-[12px] text-tertiary mb-1.5">
@@ -420,7 +434,24 @@ export function PrayerSettingsSheet({ open, onClose }: { open: boolean; onClose:
         </div>
 
         <div>
-          <p className="text-[13px] text-tertiary mb-2">Hisoblash usuli</p>
+          <p className="text-[13px] text-tertiary mb-2">
+            O'zbekiston viloyati (islom.uz dan)
+          </p>
+          <Picker
+            value={settings.prayerRegion}
+            onChange={(v) => update({ prayerRegion: v })}
+            label="Viloyat"
+            options={ISLOMUZ_REGIONS.map((r) => ({ value: r, label: r }))}
+          />
+          <p className="text-[11px] text-tertiary mt-2">
+            Vaqtlar rasmiy <strong>islom.uz</strong> kalendaridan olinadi.
+          </p>
+        </div>
+
+        <div>
+          <p className="text-[13px] text-tertiary mb-2">
+            Zaxira hisoblash usuli (Aladhan fallback)
+          </p>
           <Picker
             value={settings.calculationMethod}
             onChange={(v) => update({ calculationMethod: v })}
@@ -438,6 +469,9 @@ export function PrayerSettingsSheet({ open, onClose }: { open: boolean; onClose:
               { value: 13, label: "Diyanet (Turkiya)" },
             ]}
           />
+          <p className="text-[11px] text-tertiary mt-2">
+            islom.uz mavjud bo'lmasa shu usul ishlatiladi.
+          </p>
         </div>
 
         <div>

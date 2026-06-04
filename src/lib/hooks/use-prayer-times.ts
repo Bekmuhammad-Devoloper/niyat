@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchPrayerTimes, type PrayerName, type PrayerTimesResult } from "@/lib/api/aladhan";
+import { fetchPrayerTimesIslomUz, nearestRegion } from "@/lib/api/islomapi";
 import type { Prayer } from "@/lib/niyat-data";
 import { useSettings } from "./use-settings";
 
@@ -60,17 +61,33 @@ export function usePrayerTimes(options: UsePrayerTimesOptions = {}) {
   const school = settings.madhhab === "hanafi" ? 1 : 0;
   const method = settings.calculationMethod;
 
+  // Joriy viloyat — foydalanuvchi sozlamadan tanlasa, shuni ishlatamiz;
+  // bo'lmasa joylashuvdan eng yaqin viloyatni topamiz; bo'lmasa Toshkent.
+  const region =
+    settings.prayerRegion ||
+    (latitude != null && longitude != null
+      ? nearestRegion(latitude, longitude)
+      : "Toshkent");
+
   const query = useQuery({
-    queryKey: ["prayer-times", dateKey, latitude, longitude, school, method],
-    queryFn: ({ signal }) =>
-      fetchPrayerTimes({
+    queryKey: ["prayer-times", dateKey, region, latitude, longitude, school, method],
+    queryFn: async ({ signal }) => {
+      // 1) Avval islom.uz dan urinamiz (rasmiy O'zbekiston manbasi)
+      try {
+        return await fetchPrayerTimesIslomUz({ region, date: today, signal });
+      } catch (err) {
+        console.warn("[prayer-times] islom.uz failed, fallback to Aladhan", err);
+      }
+      // 2) Fallback — Aladhan global API
+      return fetchPrayerTimes({
         latitude,
         longitude,
         school,
         method,
         date: today,
         signal,
-      }),
+      });
+    },
     staleTime: 1000 * 60 * 60,
     gcTime: 1000 * 60 * 60 * 6,
     retry: 1,

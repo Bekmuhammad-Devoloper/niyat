@@ -106,6 +106,9 @@ export type Settings = {
   aiPersonality: AIPersonalityKey;
   madhhab: Madhhab;
   calculationMethod: PrayerCalculationMethod;
+  // O'zbekiston viloyati — islom.uz API uchun. Bo'sh bo'lsa, joylashuvdan
+  // eng yaqin viloyat avtomatik aniqlanadi.
+  prayerRegion: string;
   location: { latitude: number; longitude: number; label: string } | null;
   notifications: NotificationSettings;
   voice: VoiceSettings;
@@ -115,6 +118,7 @@ export const DEFAULT_SETTINGS: Settings = {
   aiPersonality: "balanced",
   madhhab: "hanafi",
   calculationMethod: 1, // University of Islamic Sciences, Karachi
+  prayerRegion: "Toshkent", // islom.uz API uchun default viloyat
   location: null, // Aladhan'ga uzatilmasa, Toshkent default
   notifications: {
     prayerReminders: false,
@@ -128,9 +132,9 @@ export const DEFAULT_SETTINGS: Settings = {
     niyatPersistHours: 3,
     fridayMosqueReminder: true, // default yoqilgan — juma namozi muhim
     fridayMosqueHour: 12,
-    adhanEnabled: true, // default yoqilgan — namoz vaqtidan oldin azon eshitilsin
+    adhanEnabled: true, // default yoqilgan
     adhanUrl: "",
-    adhanLeadMinutes: 10,
+    adhanLeadMinutes: 0, // 0 = aynan namoz vaqtida (bir marta)
     goalVoiceReminderEnabled: true, // default yoqilgan
     goalVoiceReminderDelayMinutes: 2,
   },
