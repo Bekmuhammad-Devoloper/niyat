@@ -9,7 +9,10 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         // Niyat'ning custom plugin'lari — Capacitor super.onCreate'dan oldin
         // ro'yxatga olinishi shart. BackgroundMic — 24/7 orqa fon mikrofoni.
+        // VoiceReminder — ilova yopiq bo'lsa ham AlarmManager + TTS bilan
+        // ovozli reja eslatma chiqaradi.
         registerPlugin(BackgroundMicPlugin.class);
+        registerPlugin(VoiceReminderPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

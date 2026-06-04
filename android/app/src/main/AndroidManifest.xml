@@ -43,6 +43,23 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
+        <!-- Niyat VoiceReminderService — ovozli reja eslatmasi.
+             AlarmManager triggered TTS engine, ilova yopiq bo'lganda ham
+             baland ovozda matnni o'qib beradi. mediaPlayback foreground type
+             — TTS audio chiqarish uchun. -->
+        <service
+            android:name=".VoiceReminderService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
+        <!-- AlarmManager broadcast receiver — Android tomonidan ovozli
+             eslatma vaqti kelganda chaqiriladi (ilova yopiq bo'lsa ham). -->
+        <receiver
+            android:name=".VoiceReminderReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <!-- Telefon qayta yuklangach BootReceiver service'ni qayta yoqadi. -->
         <receiver
             android:name=".BootReceiver"
@@ -75,6 +92,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <!-- Niyat MicService — ilova yopiq paytda ham mikrofon eshitishi uchun -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- VoiceReminderService — TTS audio chiqarish (mediaPlayback) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <!-- Telefon qayta yuklangach service'ni avtomatik yoqish uchun -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Doze mode / Battery saver'dan ozod bolish uchun -->
