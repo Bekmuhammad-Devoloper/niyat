@@ -220,10 +220,12 @@ function MainApp({
   usePushSubscribe();
   // Joylashuvni serverga jonatish
   useLocationSync();
-  // Orqa fon mikrofoni — faqat foydalanuvchi sozlamalardan yoqsa.
-  // Default: o'chiq. Sozlamalar → Ovoz → "Orqa fon mikrofoni" toggle bilan
-  // yoqiladi. Avtomatik yoqilsa registratsiya paytida ilovani crash qiladi.
-  useBackgroundMic(micSettings.voice.micBackground);
+  // Orqa fon mikrofoni — agar foydalanuvchi yoqsa YOKI "Niyat" deyish bilan
+  // uyg'otish yoqilgan bo'lsa (default). Aks holda APK yopilganda wake word
+  // ishlamas edi. Birinchi mount'da Android mikrofon ruxsatini so'raydi.
+  useBackgroundMic(
+    micSettings.voice.micBackground || micSettings.voice.wakeWordEnabled,
+  );
   // Coach'dan tashqari ekranda global mic — micAlwaysOn bo'lsa
   useGlobalMicListener(
     micSettings.voice.micAlwaysOn && tab !== "coach",

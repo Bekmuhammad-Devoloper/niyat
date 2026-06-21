@@ -609,11 +609,16 @@ export function VoiceSettingsSheet({ open, onClose }: { open: boolean; onClose: 
             }
           />
         </Row>
-        {v.wakeWordEnabled && !v.micBackground && (
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 -mt-2">
-            <p className="text-[11px] text-amber-400/90 leading-relaxed">
-              APK telefonda ilovan yopiq bo'lsa ham "Niyat" deyilganda ochilishi
-              uchun "Orqa fon mikrofoni" yoqilgan bo'lishi kerak.
+        {v.wakeWordEnabled && (
+          <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 -mt-2 space-y-1.5">
+            <p className="text-[11px] text-foreground leading-relaxed">
+              ✓ Wake word yoqilgan bo'lsa, orqa fon mikrofoni avtomatik
+              ishga tushadi.
+            </p>
+            <p className="text-[10px] text-tertiary leading-relaxed">
+              Eslatma: ba'zi telefonlar (Xiaomi, Huawei) qattiq batareya
+              tejagich ishlatadi — Sozlamalar → Niyat → Batareya → "Cheklanmagan"
+              qiling, aks holda ilova yopiq paytda mikrofon to'xtab qoladi.
             </p>
           </div>
         )}
