@@ -7,11 +7,38 @@ import { useGoals } from "./use-goals";
 import { useNiyats } from "./use-niyats";
 import { useStats } from "./use-stats";
 import { useUserProfile } from "./use-user-profile";
-import { getAuthToken } from "./use-auth-api";
+import { getAuthToken, setAuthToken } from "./use-auth-api";
 
 const DEBOUNCE_MS = 5_000;
 const MIN_INTERVAL_MS = 30_000; // server bombardimon qilmasligi uchun
-const POLL_INTERVAL_MS = 5_000; // user idle paytda ham server flaglarini olib turish
+const POLL_INTERVAL_MS = 60_000; // har minutda — ortiqcha resurs sarflamasin
+
+// Token muddati o'tgan bo'lsa (401) — tokenni tozalaymiz va sahifani qayta
+// yuklaymiz. Aks holda ilova "ishlamayotgan" his beradi: poll har minutda
+// 401 oladi, hech narsa ko'rinmaydi, sync ishlamaydi.
+// Throttle: bir sessiyada faqat bir marta reload qilamiz (cheksiz reload loop
+// xavfini oldini olish uchun).
+let authFailureHandled = false;
+function handleAuthFailure(): void {
+  if (authFailureHandled) return;
+  authFailureHandled = true;
+  console.warn("[profile-sync] token muddati o'tgan — tozalash va reload");
+  setAuthToken(null);
+  try {
+    const raw = window.localStorage.getItem("niyat:profile");
+    if (raw) {
+      const profile = JSON.parse(raw);
+      profile.loggedIn = false;
+      window.localStorage.setItem("niyat:profile", JSON.stringify(profile));
+    }
+  } catch {
+    /* ignore */
+  }
+  // Toza holatga qaytish — NiyatApp LoginScreen'ni ko'rsatadi
+  if (typeof window !== "undefined") {
+    window.setTimeout(() => window.location.reload(), 100);
+  }
+}
 
 export function useProfileSync() {
   const { goals } = useGoals();
@@ -93,6 +120,10 @@ export function useProfileSync() {
             ],
           }),
         });
+        if (res.status === 401) {
+          handleAuthFailure();
+          return;
+        }
         if (res.ok) {
           const data = (await res.json().catch(() => null)) as
             | {
@@ -148,6 +179,11 @@ export function useProfileSync() {
         const res = await fetch(`${apiBase}/api/profile/sync`, {
           headers: { Authorization: `Bearer ${token}` },
         });
+        if (res.status === 401) {
+          handleAuthFailure();
+          cancelled = true;
+          return;
+        }
         if (!res.ok) {
           console.warn("[profile-sync] poll HTTP", res.status);
           return;

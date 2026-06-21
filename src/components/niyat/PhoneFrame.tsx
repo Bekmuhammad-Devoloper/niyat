@@ -12,8 +12,18 @@ export function PhoneFrame({ children }: { children: ReactNode }) {
     // navigation bar yashirin/ko'rinib turishiga moslashadi.
     // `overflow-hidden` — root scroll bo'lmasin, faqat ichki ekran scroll bo'lsin.
     // Bu TabBar'ning doim eng pastda turishini ta'minlaydi.
+    //
+    // safe-area-inset-top — Android status bar + iOS notch ostida kontent
+    // ko'rinib qolishini oldini oladi. Capacitor `overlaysWebView: false`
+    // ham yordam beradi, lekin barcha qurilmalarda emas. CSS env() universalroq.
     return (
-      <div className="h-[100dvh] w-full flex flex-col bg-background overflow-hidden">
+      <div
+        className="h-[100dvh] w-full flex flex-col bg-background overflow-hidden"
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
         {children}
       </div>
     );
