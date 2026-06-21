@@ -106,6 +106,27 @@
     <!-- Bildirishnomalar (namoz vaqti eslatmalari uchun) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <!-- PhoneControl plugin'i — boshqa ilovalarni qidirish uchun
+         (Android 11+ packageManager.queryIntentActivities() oq ro'yxati).
+         Niyat AI foydalanuvchi xohlagan ilovani topib ochish uchun ishlatadi. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.DIAL" />
+            <data android:scheme="tel" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM" />
+        </intent>
+    </queries>
+
     <!-- Qibla kompas uchun magnetometer va accelerometer sensorlar.
          required=false: agar telefon'da sensor yo'q bo'lsa ham ilova ishlaydi
          (foydalanuvchi "Qo'lda burish" rejimini ishlatadi). -->

@@ -24,6 +24,7 @@ import { autoCapitalize, capitalizeFirst } from "@/lib/text-utils";
 import { Flag } from "../Flag";
 import { SunnatSheet, ScreenTimeSheet } from "../sheets";
 import { AnnouncementBanner } from "../AnnouncementBanner";
+import { NiyatVoiceMode } from "../NiyatVoiceMode";
 
 function useCountUp(target: number, duration = 900) {
   const [v, setV] = useState(target);
@@ -103,6 +104,7 @@ export function HomeScreen() {
   const [draftText, setDraftText] = useState("");
   const [sunnatOpen, setSunnatOpen] = useState(false);
   const [screenTimeOpen, setScreenTimeOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const sunnat = useSunnat();
   const appTime = useAppTime();
   const { nextPrayer, hijriReadable, gregorianReadable } = usePrayerTimes();
@@ -457,24 +459,20 @@ export function HomeScreen() {
       </div>
 
       {/* Floating mic — yangi niyat qo'shadi (ovozli) */}
+      {/* Niyat bilan gaplashish — ovozli muloqot rejimini ochish.
+          Bu MVP 2'ning asosiy entry-point'i. Big, primary, pulsing. */}
       <button
         type="button"
-        onClick={() => {
-          if (!stt.supported) {
-            toast.info("Brauzeringiz ovozli kiritishni qo'llamaydi");
-            return;
-          }
-          startAdding();
-          setTimeout(() => stt.start(), 200);
-        }}
-        className="absolute bottom-4 right-5 h-14 w-14 rounded-2xl bg-primary text-primary-foreground shadow-lg shadow-primary/40 flex items-center justify-center active:scale-95 transition z-30"
-        aria-label="Ovozli niyat yozish"
+        onClick={() => setVoiceOpen(true)}
+        className="absolute bottom-4 right-5 h-16 w-16 rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/40 flex items-center justify-center active:scale-95 transition z-30 pulse-gold"
+        aria-label="Niyat bilan ovozli gaplashish"
       >
-        <Mic size={22} strokeWidth={2.2} />
+        <Mic size={26} strokeWidth={2.4} />
       </button>
 
       <SunnatSheet open={sunnatOpen} onClose={() => setSunnatOpen(false)} />
       <ScreenTimeSheet open={screenTimeOpen} onClose={() => setScreenTimeOpen(false)} />
+      <NiyatVoiceMode open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   );
 }

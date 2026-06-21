@@ -142,6 +142,28 @@
     to { transform: translateY(0); }
   }
 
+  /* Niyat Voice Mode — orb animatsiyalari */
+  @keyframes niyat-orb-ripple {
+    0% { transform: scale(1); opacity: 0.6; }
+    100% { transform: scale(1.5); opacity: 0; }
+  }
+  @keyframes niyat-orb-pulse-strong {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+  }
+  @keyframes niyat-orb-pulse-slow {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.04); }
+  }
+  @keyframes niyat-orb-pulse-fast {
+    0%, 100% { transform: rotate(0deg) scale(1); }
+    50% { transform: rotate(180deg) scale(0.97); }
+    100% { transform: rotate(360deg) scale(1); }
+  }
+  .niyat-orb-pulse-strong { animation: niyat-orb-pulse-strong 1.5s ease-in-out infinite; }
+  .niyat-orb-pulse-slow { animation: niyat-orb-pulse-slow 2.5s ease-in-out infinite; }
+  .niyat-orb-pulse-fast { animation: niyat-orb-pulse-fast 3s linear infinite; }
+
   /* Custom range slider — dark theme uchun */
   .niyat-slider {
     -webkit-appearance: none;

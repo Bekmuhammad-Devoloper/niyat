@@ -13,6 +13,7 @@ public class MainActivity extends BridgeActivity {
         // ovozli reja eslatma chiqaradi.
         registerPlugin(BackgroundMicPlugin.class);
         registerPlugin(VoiceReminderPlugin.class);
+        registerPlugin(PhoneControlPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }
