@@ -596,9 +596,31 @@ export function VoiceSettingsSheet({ open, onClose }: { open: boolean; onClose: 
   return (
     <BottomSheet open={open} onClose={onClose} title="Ovoz va til">
       <div className="space-y-4">
+        {/* "Niyat" deyish bilan ovozli muloqotni avtomatik ochish */}
         <Row
           icon={<Mic size={16} className="text-primary" />}
-          title="Mikrofon doimiy yoniq"
+          title='"Niyat" desam ochilsin'
+          subtitle="Mikrofon doim eshityapti — 'Niyat' desangiz ovozli rejim ochiladi"
+        >
+          <Toggle
+            checked={v.wakeWordEnabled}
+            onChange={() =>
+              update({ voice: { ...v, wakeWordEnabled: !v.wakeWordEnabled } })
+            }
+          />
+        </Row>
+        {v.wakeWordEnabled && !v.micBackground && (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 -mt-2">
+            <p className="text-[11px] text-amber-400/90 leading-relaxed">
+              APK telefonda ilovan yopiq bo'lsa ham "Niyat" deyilganda ochilishi
+              uchun "Orqa fon mikrofoni" yoqilgan bo'lishi kerak.
+            </p>
+          </div>
+        )}
+
+        <Row
+          icon={<Mic size={16} className="text-primary" />}
+          title="Mikrofon doimiy yoniq (Coach)"
           subtitle="Coach ekranda — gapiring, avtomatik tinglaydi va yuboradi"
         >
           <Toggle
@@ -609,8 +631,18 @@ export function VoiceSettingsSheet({ open, onClose }: { open: boolean; onClose: 
           />
         </Row>
 
-        {/* MVP 1 da "Orqa fonda mikrofon" toggle va exempt tugmalari yashirilgan.
-            MVP 2 da foydalanuvchi koradi va boshqarish imkoniga ega bo'ladi. */}
+        <Row
+          icon={<Mic size={16} className="text-primary" />}
+          title="Orqa fon mikrofoni (APK)"
+          subtitle="Ilova yopiq paytda ham 'Niyat' eshitsin (foreground service)"
+        >
+          <Toggle
+            checked={v.micBackground}
+            onChange={() =>
+              update({ voice: { ...v, micBackground: !v.micBackground } })
+            }
+          />
+        </Row>
 
         <Row
           icon={<Volume2 size={16} className="text-primary" />}

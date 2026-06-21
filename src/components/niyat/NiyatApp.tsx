@@ -28,6 +28,8 @@ import { useGlobalMicListener } from "@/lib/hooks/use-global-mic-listener";
 import { useNeedsAutoSync } from "@/lib/hooks/use-backend-sync-check";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useAppTime } from "@/lib/hooks/use-app-time";
+import { useWakeWord } from "@/lib/hooks/use-wake-word";
+import { NiyatVoiceMode } from "./NiyatVoiceMode";
 import { AutoSyncModal } from "./AutoSyncModal";
 
 const SCREEN_REGISTRY: Record<TabKey, React.ComponentType> = {
@@ -233,6 +235,20 @@ function MainApp({
     phone: profile.phone,
   });
 
+  // ====== Wake word "Niyat" — global ======
+  // Foydalanuvchi "Niyat" desa, ovozli muloqot rejimi avtomatik ochiladi.
+  // Native (APK): BackgroundMic foreground service ishlasagina ishlaydi.
+  // Web: brauzer mikrofonidan tinglaydi (foydalanuvchi ruxsat bergan bo'lsa).
+  const [voiceModeOpen, setVoiceModeOpen] = useState(false);
+  useWakeWord({
+    enabled: micSettings.voice.wakeWordEnabled,
+    voiceModeOpen,
+    onWake: (source, text) => {
+      console.log(`[wake-word] uyg'otildi (${source}):`, text);
+      setVoiceModeOpen(true);
+    },
+  });
+
   return (
     <PhoneFrame>
       <StatusBar />
@@ -254,6 +270,10 @@ function MainApp({
       </main>
       <AudioMiniPlayer />
       <TabBar active={tab} onChange={setTab} />
+      <NiyatVoiceMode
+        open={voiceModeOpen}
+        onClose={() => setVoiceModeOpen(false)}
+      />
       {needsAutoSync && (
         <AutoSyncModal
           firstName={profile.firstName}

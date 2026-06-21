@@ -100,6 +100,9 @@ export type VoiceSettings = {
   // APK'da: ilova yopiq paytda ham mikrofon eshitib tursin (foreground service).
   // Bildirishnoma doimiy chiqib turadi ("Niyat — mikrofon yoqilgan").
   micBackground: boolean;
+  // "Niyat" deyish bilan ovozli muloqot rejimini avtomatik ochish (wake word).
+  // Talab: micBackground yoqilgan bo'lishi kerak (Android'da 24/7 eshitish uchun).
+  wakeWordEnabled: boolean;
 };
 
 export type Settings = {
@@ -145,6 +148,7 @@ export const DEFAULT_SETTINGS: Settings = {
     preferredLang: "uz-UZ",
     micAlwaysOn: false, // default: o'chiq — foydalanuvchi Coach'da xohlasa yoqadi
     micBackground: false, // default: o'chiq — Sozlamalar → Ovoz orqali yoqiladi
+    wakeWordEnabled: true, // default: yoqilgan — "Niyat" deyish bilan ovozli muloqot
   },
 };
 

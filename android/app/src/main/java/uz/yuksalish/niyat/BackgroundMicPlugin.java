@@ -14,8 +14,10 @@
 package uz.yuksalish.niyat;
 
 import android.app.ActivityManager;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Build;
@@ -39,6 +41,44 @@ public class BackgroundMicPlugin extends Plugin {
 
     private SharedPreferences prefs() {
         return getContext().getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+    }
+
+    // Wake word broadcast'ni qabul qiluvchi — MicService "niyat" so'zini
+    // topganda broadcast yuboradi, biz JS'ga "wakeWord" eventi qilib uzatamiz.
+    private BroadcastReceiver wakeReceiver;
+
+    @Override
+    public void load() {
+        super.load();
+        wakeReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context ctx, Intent intent) {
+                if (intent == null) return;
+                String text = intent.getStringExtra(MicService.EXTRA_WAKE_TEXT);
+                JSObject data = new JSObject();
+                data.put("text", text != null ? text : "");
+                data.put("at", System.currentTimeMillis());
+                notifyListeners("wakeWord", data);
+            }
+        };
+        IntentFilter filter = new IntentFilter(MicService.ACTION_WAKE_WORD);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                getContext().registerReceiver(
+                        wakeReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
+            } else {
+                getContext().registerReceiver(wakeReceiver, filter);
+            }
+        } catch (Exception ignored) {}
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        if (wakeReceiver != null) {
+            try { getContext().unregisterReceiver(wakeReceiver); } catch (Exception ignored) {}
+            wakeReceiver = null;
+        }
+        super.handleOnDestroy();
     }
 
     @PluginMethod

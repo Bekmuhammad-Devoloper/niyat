@@ -54,6 +54,13 @@ public class MicService extends Service {
     private static final long RESTART_DELAY_MS = 800;
     private static final long WATCHDOG_INTERVAL_MS = 10 * 60 * 1000L; // 10 daqiqa
 
+    // Wake word — foydalanuvchi "Niyat" deganda ovozli muloqotni ochish uchun.
+    // Plugin shu broadcastni ushlab JS'ga uzatadi.
+    public static final String ACTION_WAKE_WORD = "uz.yuksalish.niyat.WAKE_WORD";
+    public static final String EXTRA_WAKE_TEXT = "text";
+    private static final long WAKE_COOLDOWN_MS = 4_000L; // bir uyg'otish dan keyin 4 sek jim
+    private long lastWakeAt = 0L;
+
     private SpeechRecognizer recognizer;
     private Handler mainHandler;
     private PowerManager.WakeLock wakeLock;
@@ -177,7 +184,15 @@ public class MicService extends Service {
         @Override public void onRmsChanged(float rmsdB) {}
         @Override public void onBufferReceived(byte[] buffer) {}
         @Override public void onEndOfSpeech() {}
-        @Override public void onPartialResults(Bundle partialResults) {}
+        @Override public void onPartialResults(Bundle partialResults) {
+            // Wake word'ni iloji boricha tez topish uchun partial natijalarni ham tekshiramiz
+            ArrayList<String> matches = partialResults.getStringArrayList(
+                    SpeechRecognizer.RESULTS_RECOGNITION
+            );
+            if (matches != null && !matches.isEmpty()) {
+                checkWakeWord(matches.get(0));
+            }
+        }
         @Override public void onEvent(int eventType, Bundle params) {}
 
         @Override
@@ -191,7 +206,9 @@ public class MicService extends Service {
                     SpeechRecognizer.RESULTS_RECOGNITION
             );
             if (matches != null && !matches.isEmpty()) {
-                saveTranscript(matches.get(0));
+                String text = matches.get(0);
+                saveTranscript(text);
+                checkWakeWord(text);
             }
             restartLater();
         }
@@ -205,7 +222,8 @@ public class MicService extends Service {
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
         );
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uz-UZ");
-        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false);
+        // Wake word'ni real vaqtda topish uchun partial natijalar yoqilgan
+        intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getPackageName());
         try {
             recognizer.startListening(intent);
@@ -218,6 +236,51 @@ public class MicService extends Service {
     private void restartLater() {
         if (!shouldRun) return;
         mainHandler.postDelayed(this::startListening, RESTART_DELAY_MS);
+    }
+
+    // Wake word ("niyat" yoki "Niyat") topilishini tekshirish va event broadcast.
+    // Foydalanuvchi tabiiy nutqida "niyat" so'zi ko'p uchrasa ham, bu uyg'otish
+    // OK — voice mode ochilsa foydalanuvchi gapirsa AI javob beradi, gapirmasa
+    // qisqa vaqt ichida yopilib qoladi.
+    private void checkWakeWord(String raw) {
+        if (raw == null || raw.trim().isEmpty()) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now - lastWakeAt < WAKE_COOLDOWN_MS) return; // throttle
+
+        String lower = raw.toLowerCase().trim();
+        // Asosiy variantlar — Android STT uz-UZ qo'llamasa ru/tr accent bilan
+        // "neyat", "nyat", "niyot" kabi yozadi. Hammasini ushlaymiz.
+        if (matchesWakeWord(lower)) {
+            lastWakeAt = now;
+            try {
+                Intent broadcast = new Intent(ACTION_WAKE_WORD);
+                broadcast.putExtra(EXTRA_WAKE_TEXT, raw);
+                broadcast.setPackage(getPackageName()); // ichki broadcast
+                sendBroadcast(broadcast);
+                Log.i(TAG, "Wake word topildi: " + raw);
+            } catch (Exception e) {
+                Log.w(TAG, "wake broadcast xato", e);
+            }
+        }
+    }
+
+    private boolean matchesWakeWord(String text) {
+        // So'z chegarasiga e'tibor: "niyat" alohida so'z yoki gap boshida
+        // bo'lishi kerak — "muniyat", "qaniyat" kabi qismli mosliklarga
+        // tushib qolmaslik uchun.
+        String[] needles = {"niyat", "neyat", "nyat", "niyot", "niayat"};
+        for (String n : needles) {
+            int idx = text.indexOf(n);
+            while (idx >= 0) {
+                boolean leftOk = idx == 0 || !Character.isLetterOrDigit(text.charAt(idx - 1));
+                int endIdx = idx + n.length();
+                boolean rightOk = endIdx >= text.length()
+                        || !Character.isLetterOrDigit(text.charAt(endIdx));
+                if (leftOk && rightOk) return true;
+                idx = text.indexOf(n, idx + 1);
+            }
+        }
+        return false;
     }
 
     private void saveTranscript(String text) {
