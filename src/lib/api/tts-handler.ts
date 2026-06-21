@@ -23,10 +23,25 @@ const VOICE_INSTRUCTIONS =
   "Speak Uzbek text with care and sincerity, as if comforting a friend. " +
   "Show empathy and warmth in your voice — never sound flat or mechanical.";
 
+// Eslatma uchun maxsus ohang — mehribon ona kabi, yumshoq, samimiy,
+// lekin so'zlarni aniq talaffuz qilsin. Uzbek/Turkic so'zlarni nutq
+// ravonligi bilan o'qisin.
+const REMINDER_INSTRUCTIONS =
+  "You are a beloved Uzbek mother whispering a heartfelt reminder to her child whom she loves dearly. " +
+  "Voice character: deeply warm, melodic, soft, soulful, genuinely emotional — NEVER monotone, NEVER mechanical. " +
+  "Speak as if you are physically next to your child, almost in a whisper, with palpable love and tenderness. " +
+  "Take generous natural pauses between phrases — breathe like a human, not a robot. " +
+  "Pronounce Arabic-origin words ('sollallohu alayhi va sallam', 'ummatidan') slowly and with reverence and a slight pause of respect. " +
+  "Emphasize the child's name with warmth, as a mother would when calling her dearest. " +
+  "Stretch vowels slightly. Let the voice rise and fall naturally with emotion. " +
+  "End the sentence with a gentle, slightly sad sigh — as if you're heartbroken your child forgot, but you forgive them with love. " +
+  "If this sounds like a generic TTS robot, you have failed. Sound human. Sound like a mother.";
+
 export type TtsRequestBody = {
   text: string;
   voice?: string;
   speed?: number; // 0.25 - 4.0
+  mode?: "default" | "reminder"; // reminder = maxsus mehribon ona ohangi
 };
 
 export async function handleTtsRequest(
@@ -76,6 +91,8 @@ export async function handleTtsRequest(
 
   const voice = body.voice ?? DEFAULT_VOICE;
   const speed = Math.max(0.5, Math.min(2.0, body.speed ?? 1.0));
+  const instructions =
+    body.mode === "reminder" ? REMINDER_INSTRUCTIONS : VOICE_INSTRUCTIONS;
 
   try {
     const openai = new OpenAI({ apiKey: openaiKey });
@@ -85,7 +102,7 @@ export async function handleTtsRequest(
       model: TTS_MODEL,
       voice,
       input: text,
-      instructions: VOICE_INSTRUCTIONS,
+      instructions,
       response_format: "mp3",
       speed,
     } as Parameters<typeof openai.audio.speech.create>[0]);

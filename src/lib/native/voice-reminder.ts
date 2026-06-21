@@ -16,6 +16,9 @@ export interface VoiceReminderPlugin {
     id: number;
     text: string;
     triggerAtMs: number;
+    // Pre-rendered MP3 (base64, "data:" prefiksisiz) — yumshoq OpenAI ovozi.
+    // Bo'lmasa Android ichki TTS engine fallback bo'lib ishlaydi.
+    audioBase64?: string;
   }): Promise<{ scheduled: boolean; id: number }>;
   cancel(opts: { id: number }): Promise<{ cancelled: boolean }>;
   cancelAll(): Promise<{ cancelled: boolean; count: number }>;

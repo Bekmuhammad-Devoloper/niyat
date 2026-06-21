@@ -51,14 +51,21 @@ export function useCoachTTS() {
   }, []);
 
   const speak = useCallback(
-    async (text: string, voice: string = "ash"): Promise<void> => {
+    async (
+      text: string,
+      voice: string = "ash",
+      mode: "default" | "reminder" = "default",
+    ): Promise<void> => {
       const cleaned = text.trim();
       if (!cleaned) return;
       setError(null);
 
-      // Avval cache'ni tekshir
-      const key = cacheKey(cleaned, voice);
+      // Avval cache'ni tekshir (mode ham kalitda)
+      const key = `${mode}::${cacheKey(cleaned, voice)}`;
       let blobUrl = audioCache.get(key) ?? null;
+
+      // Reminder mode'da biroz sekinroq — har so'z aniq, ona kabi yumshoq
+      const speed = mode === "reminder" ? 0.92 : 1.0;
 
       // Cache'da yo'q — server'dan so'rab olamiz
       if (!blobUrl) {
@@ -68,7 +75,7 @@ export function useCoachTTS() {
           const res = await fetch(`${apiBase}/api/tts`, {
             method: "POST",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text: cleaned, voice }),
+            body: JSON.stringify({ text: cleaned, voice, mode, speed }),
           });
           if (!res.ok) {
             const errBody = (await res.json().catch(() => ({}))) as { error?: string };

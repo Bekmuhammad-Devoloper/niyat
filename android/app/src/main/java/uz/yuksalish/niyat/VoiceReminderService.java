@@ -1,6 +1,13 @@
-// Foreground service — Android'ning ichki TextToSpeech engine'i orqali matnni
-// ovozli o'qib beradi. AlarmManager broadcast'ini olib, ilova yopiq bo'lsa ham
-// ishlaydi. Audio media stream maksimal balandlikka ko'tariladi.
+// Foreground service — ovozli eslatma ijro etadi. AlarmManager broadcast'ini
+// olib, ilova yopiq bo'lsa ham ishlaydi.
+//
+// Ikki rejim:
+//   1) AUDIO FAYL (mp3) — agar jadval qo'yish paytida server TTS bilan
+//      pre-rendered MP3 saqlangan bo'lsa, MediaPlayer bilan ijro etiladi
+//      (shirali tabiiy ayol ovozi).
+//   2) Android TTS engine (fallback) — internet bo'lmagan yoki MP3 saqlanmagan
+//      bo'lsa, Android'ning ichki TextToSpeech engine'idan foydalanamiz
+//      (robotik, lekin baribir ishlaydi).
 
 package uz.yuksalish.niyat;
 
@@ -11,7 +18,9 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.media.AudioAttributes;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -20,17 +29,20 @@ import android.speech.tts.UtteranceProgressListener;
 
 import androidx.core.app.NotificationCompat;
 
+import java.io.File;
 import java.util.HashMap;
 import java.util.Locale;
 
 public class VoiceReminderService extends Service {
 
     public static final String EXTRA_TEXT = "text";
+    public static final String EXTRA_AUDIO_PATH = "audioPath";
     public static final String EXTRA_NOTIF_ID = "notifId";
     public static final String CHANNEL_ID = "niyat-voice-reminder-fg";
     public static final int FG_NOTIF_ID = 4711;
 
     private TextToSpeech tts;
+    private MediaPlayer mediaPlayer;
     private int previousVolume = -1;
     private AudioManager audioManager;
 
@@ -44,7 +56,8 @@ public class VoiceReminderService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         final String text = intent != null ? intent.getStringExtra(EXTRA_TEXT) : null;
-        if (text == null || text.trim().isEmpty()) {
+        final String audioPath = intent != null ? intent.getStringExtra(EXTRA_AUDIO_PATH) : null;
+        if ((text == null || text.trim().isEmpty()) && (audioPath == null || audioPath.isEmpty())) {
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -58,6 +71,22 @@ public class VoiceReminderService extends Service {
                 audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, max, 0);
             }
         } catch (Exception ignored) {}
+
+        // 1) AVVAL — pre-rendered MP3 fayl bor bo'lsa, MediaPlayer bilan ijro
+        // etamiz (shirali tabiiy ayol ovozi, OpenAI TTS dan saqlangan).
+        if (audioPath != null && !audioPath.isEmpty()) {
+            File f = new File(audioPath);
+            if (f.exists() && f.length() > 0) {
+                playWithMediaPlayer(f);
+                return START_NOT_STICKY;
+            }
+        }
+
+        // 2) Fallback — Android TTS engine (matn faqat bor, MP3 yo'q)
+        if (text == null || text.trim().isEmpty()) {
+            stopAndRelease();
+            return START_NOT_STICKY;
+        }
 
         tts = new TextToSpeech(getApplicationContext(), status -> {
             if (status != TextToSpeech.SUCCESS) {
@@ -97,6 +126,28 @@ public class VoiceReminderService extends Service {
         return START_NOT_STICKY;
     }
 
+    private void playWithMediaPlayer(File file) {
+        try {
+            mediaPlayer = new MediaPlayer();
+            mediaPlayer.setAudioAttributes(
+                    new AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build());
+            mediaPlayer.setDataSource(file.getAbsolutePath());
+            mediaPlayer.setVolume(1.0f, 1.0f);
+            mediaPlayer.setOnCompletionListener(mp -> stopAndRelease());
+            mediaPlayer.setOnErrorListener((mp, what, extra) -> {
+                stopAndRelease();
+                return true;
+            });
+            mediaPlayer.prepare();
+            mediaPlayer.start();
+        } catch (Exception e) {
+            stopAndRelease();
+        }
+    }
+
     private Locale pickLocale(TextToSpeech engine) {
         Locale[] preferred = new Locale[] {
                 new Locale("uz", "UZ"),
@@ -116,6 +167,11 @@ public class VoiceReminderService extends Service {
     }
 
     private void stopAndRelease() {
+        if (mediaPlayer != null) {
+            try { if (mediaPlayer.isPlaying()) mediaPlayer.stop(); } catch (Exception ignored) {}
+            try { mediaPlayer.release(); } catch (Exception ignored) {}
+            mediaPlayer = null;
+        }
         if (tts != null) {
             try { tts.stop(); } catch (Exception ignored) {}
             try { tts.shutdown(); } catch (Exception ignored) {}

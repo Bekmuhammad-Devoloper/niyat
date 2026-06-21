@@ -13,11 +13,13 @@ import android.os.PowerManager;
 public class VoiceReminderReceiver extends BroadcastReceiver {
 
     public static final String EXTRA_TEXT = "text";
+    public static final String EXTRA_AUDIO_PATH = "audioPath";
     public static final String EXTRA_NOTIF_ID = "notifId";
 
     @Override
     public void onReceive(Context context, Intent intent) {
         String text = intent.getStringExtra(EXTRA_TEXT);
+        String audioPath = intent.getStringExtra(EXTRA_AUDIO_PATH);
         int notifId = intent.getIntExtra(EXTRA_NOTIF_ID, 0);
 
         // CPU'ni qisqa vaqtga yorug' tutamiz — TTS service ishga tushguncha
@@ -31,6 +33,7 @@ public class VoiceReminderReceiver extends BroadcastReceiver {
 
         Intent svc = new Intent(context, VoiceReminderService.class);
         svc.putExtra(VoiceReminderService.EXTRA_TEXT, text);
+        svc.putExtra(VoiceReminderService.EXTRA_AUDIO_PATH, audioPath);
         svc.putExtra(VoiceReminderService.EXTRA_NOTIF_ID, notifId);
 
         try {

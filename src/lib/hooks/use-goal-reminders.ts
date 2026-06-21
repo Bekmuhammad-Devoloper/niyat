@@ -50,7 +50,10 @@ async function ensureReminderChannel(): Promise<void> {
   }
 }
 
-const FEMALE_VOICE = "coral"; // iliq, mehribon ayol ovozi
+// "ballad" — eng tabiiy va emotsional ayol ovozi (OpenAI gpt-4o-mini-tts).
+// Mehribon ona kabi yumshoq, samimiy. Reminder mode bilan birga foydalanilganda
+// haqiqiy odam ovozi kabi eshitiladi (shimmer/coral biroz robotik bo'lib qoldi).
+const FEMALE_VOICE = "ballad";
 
 function toISODate(d: Date = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -59,6 +62,43 @@ function toISODate(d: Date = new Date()): string {
 function buildReminderMessage(firstName: string, goalTitle: string): string {
   const name = firstName && firstName !== "do'st" ? firstName : "azizim";
   return `Ey Muhammad sollallohu alayhi va sallam ummatidan ${name}, siz "${goalTitle}" maqsadingizni bajarmadingiz. Bu sizning maqsadingiz edi.`;
+}
+
+// Server TTS'dan MP3 olish va base64'ga aylantirish. Native plugin'ga
+// uzatish uchun ishlatiladi (oldindan MP3'ni saqlab qo'yish — keyin ilova
+// yopiq bo'lganda ham yumshoq tabiiy ovoz ijro etiladi). Xato bo'lsa null
+// qaytariladi va plugin Android ichki TTS engine'iga o'tadi.
+async function renderReminderMp3Base64(text: string): Promise<string | null> {
+  try {
+    const apiBase = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
+    const res = await fetch(`${apiBase}/api/tts`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        text,
+        voice: FEMALE_VOICE,
+        mode: "reminder",
+        speed: 0.92, // biroz sekin — har so'z aniq eshitilsin
+      }),
+    });
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    const buf = await blob.arrayBuffer();
+    // ArrayBuffer → base64 (chunk bo'yicha — katta hajmda call stack overflow oldini olish)
+    const bytes = new Uint8Array(buf);
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(
+        null,
+        Array.from(bytes.subarray(i, i + chunk)),
+      );
+    }
+    return btoa(binary);
+  } catch (err) {
+    console.warn("[goal-reminders] mp3 pre-render failed", err);
+    return null;
+  }
 }
 
 // Diqqat tortuvchi qo'ng'iroq — TTS'dan oldin chalinadigan qisqa 2 ta beep.
@@ -168,7 +208,7 @@ async function speakReminder(
   await new Promise<void>((resolve) => window.setTimeout(resolve, 1300));
 
   try {
-    await tts.speak(text, FEMALE_VOICE);
+    await tts.speak(text, FEMALE_VOICE, "reminder");
     return;
   } catch (err) {
     console.warn("[goal-reminders] server TTS failed, fallback to webspeech", err);
@@ -331,10 +371,15 @@ export function useGoalReminders() {
 
         const baseId = hashString(g.id) & 0x7fffffff;
         const voicePhrase = buildReminderMessage(profile.firstName, g.title);
+        // OpenAI'dan yumshoq tabiiy ayol ovozi bilan MP3 oldindan tayyorlaymiz.
+        // Native plugin uni cache faylga saqlab, alarm vaqtida MediaPlayer
+        // bilan ijro etadi (robotik TTS engine emas — shirali tabiiy ovoz).
+        const audioBase64 = await renderReminderMp3Base64(voicePhrase);
         try {
           await VoiceReminder.schedule({
             id: baseId + 2, // notification ID'lari bilan to'qnashmasligi uchun
-            text: voicePhrase,
+            text: voicePhrase, // fallback uchun
+            audioBase64: audioBase64 ?? undefined,
             triggerAtMs: followupAt,
           });
         } catch (err) {

@@ -14,6 +14,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
+import android.util.Base64;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -21,6 +22,8 @@ import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -38,6 +41,7 @@ public class VoiceReminderPlugin extends Plugin {
     public void schedule(PluginCall call) {
         Integer id = call.getInt("id");
         String text = call.getString("text");
+        String audioBase64 = call.getString("audioBase64"); // ixtiyoriy — pre-rendered MP3
         Long triggerAtMs = call.getLong("triggerAtMs");
 
         if (id == null || text == null || triggerAtMs == null) {
@@ -56,7 +60,25 @@ public class VoiceReminderPlugin extends Plugin {
             return;
         }
 
-        PendingIntent pi = buildPendingIntent(ctx, id, text);
+        // Agar audio base64 berilgan bo'lsa, cache'ga MP3 fayl saqlaymiz
+        String audioPath = null;
+        if (audioBase64 != null && !audioBase64.isEmpty()) {
+            try {
+                byte[] mp3 = Base64.decode(audioBase64, Base64.DEFAULT);
+                File dir = new File(ctx.getCacheDir(), "voice-reminder");
+                if (!dir.exists()) dir.mkdirs();
+                File f = new File(dir, "reminder-" + id + ".mp3");
+                FileOutputStream fos = new FileOutputStream(f);
+                fos.write(mp3);
+                fos.close();
+                audioPath = f.getAbsolutePath();
+            } catch (Exception e) {
+                // Audio yozib bo'lmasa — TTS fallback ishlatamiz
+                audioPath = null;
+            }
+        }
+
+        PendingIntent pi = buildPendingIntent(ctx, id, text, audioPath);
 
         try {
             // setExactAndAllowWhileIdle — Doze mode'ni yengadi (Android 6+).
@@ -100,10 +122,16 @@ public class VoiceReminderPlugin extends Plugin {
         Context ctx = getContext();
         AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
         if (am != null) {
-            PendingIntent pi = buildPendingIntent(ctx, id, "");
+            PendingIntent pi = buildPendingIntent(ctx, id, "", null);
             try { am.cancel(pi); } catch (Exception ignored) {}
             try { pi.cancel(); } catch (Exception ignored) {}
         }
+        // Saqlangan MP3 fayl bo'lsa o'chiramiz
+        try {
+            File f = new File(new File(ctx.getCacheDir(), "voice-reminder"),
+                    "reminder-" + id + ".mp3");
+            if (f.exists()) f.delete();
+        } catch (Exception ignored) {}
         Set<String> ids = new HashSet<>(prefs().getStringSet(KEY_IDS, new HashSet<>()));
         ids.remove(String.valueOf(id));
         prefs().edit().putStringSet(KEY_IDS, ids).apply();
@@ -122,12 +150,24 @@ public class VoiceReminderPlugin extends Plugin {
             for (String idStr : ids) {
                 try {
                     int id = Integer.parseInt(idStr);
-                    PendingIntent pi = buildPendingIntent(ctx, id, "");
+                    PendingIntent pi = buildPendingIntent(ctx, id, "", null);
                     am.cancel(pi);
                     pi.cancel();
                 } catch (Exception ignored) {}
             }
         }
+        // Cache faylllarni tozalash
+        try {
+            File dir = new File(ctx.getCacheDir(), "voice-reminder");
+            if (dir.exists()) {
+                File[] files = dir.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        try { f.delete(); } catch (Exception ignored) {}
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
         prefs().edit().remove(KEY_IDS).apply();
         JSObject ret = new JSObject();
         ret.put("cancelled", true);
@@ -147,9 +187,12 @@ public class VoiceReminderPlugin extends Plugin {
         call.resolve(ret);
     }
 
-    private PendingIntent buildPendingIntent(Context ctx, int id, String text) {
+    private PendingIntent buildPendingIntent(Context ctx, int id, String text, String audioPath) {
         Intent intent = new Intent(ctx, VoiceReminderReceiver.class);
         intent.putExtra(VoiceReminderReceiver.EXTRA_TEXT, text);
+        if (audioPath != null) {
+            intent.putExtra(VoiceReminderReceiver.EXTRA_AUDIO_PATH, audioPath);
+        }
         intent.putExtra(VoiceReminderReceiver.EXTRA_NOTIF_ID, id);
         // setData — har bir id uchun unikal Intent (PendingIntent dedupe uchun)
         intent.setData(android.net.Uri.parse("niyat-voice-reminder://" + id));
