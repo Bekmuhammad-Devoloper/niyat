@@ -43,6 +43,7 @@ import { BottomSheet } from "./BottomSheet";
 import { Picker, TimePicker, Slider } from "./form";
 import { Flag } from "./Flag";
 import { NiyatLogo } from "./Logo";
+import { MicDebugSheet } from "./MicDebugSheet";
 import { AI_PERSONALITIES, type AIPersonalityKey, type Madhhab } from "@/lib/settings";
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useGeolocation } from "@/lib/hooks/use-geolocation";
@@ -592,6 +593,7 @@ export function VoiceSettingsSheet({ open, onClose }: { open: boolean; onClose: 
   const { settings, update } = useSettings();
   const tts = useSpeechSynthesis();
   const v = settings.voice;
+  const [micDebugOpen, setMicDebugOpen] = useState(false);
 
   return (
     <BottomSheet open={open} onClose={onClose} title="Ovoz va til">
@@ -610,16 +612,23 @@ export function VoiceSettingsSheet({ open, onClose }: { open: boolean; onClose: 
           />
         </Row>
         {v.wakeWordEnabled && (
-          <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 -mt-2 space-y-1.5">
+          <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 -mt-2 space-y-2">
             <p className="text-[11px] text-foreground leading-relaxed">
               ✓ Wake word yoqilgan bo'lsa, orqa fon mikrofoni avtomatik
               ishga tushadi.
             </p>
             <p className="text-[10px] text-tertiary leading-relaxed">
               Eslatma: ba'zi telefonlar (Xiaomi, Huawei) qattiq batareya
-              tejagich ishlatadi — Sozlamalar → Niyat → Batareya → "Cheklanmagan"
-              qiling, aks holda ilova yopiq paytda mikrofon to'xtab qoladi.
+              tejagich ishlatadi — Sozlamalar → Niyat → Batareya →
+              "Cheklanmagan" qiling.
             </p>
+            <button
+              type="button"
+              onClick={() => setMicDebugOpen(true)}
+              className="w-full mt-1 h-9 rounded-lg bg-elevated text-foreground text-[12px] font-medium border border-border hover:border-primary/40 transition"
+            >
+              🎙️ Mikrofon nima eshityapti? (debug)
+            </button>
           </div>
         )}
 
@@ -793,6 +802,7 @@ export function VoiceSettingsSheet({ open, onClose }: { open: boolean; onClose: 
           </p>
         )}
       </div>
+      <MicDebugSheet open={micDebugOpen} onClose={() => setMicDebugOpen(false)} />
     </BottomSheet>
   );
 }

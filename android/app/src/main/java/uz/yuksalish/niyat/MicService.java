@@ -61,6 +61,15 @@ public class MicService extends Service {
     private static final long WAKE_COOLDOWN_MS = 4_000L; // bir uyg'otish dan keyin 4 sek jim
     private long lastWakeAt = 0L;
 
+    // Til fallback — ko'p Android telefonlar uz-UZ'ni qo'llamaydi. Birinchi 3
+    // muvaffaqiyatli aniqlash (yoki 3 ta xato) keyin keyingi tilga o'tamiz.
+    // ru-RU eng keng tarqalgan (deyarli barcha telefon), tr-TR fonetik yaqin,
+    // en-US zaxira.
+    private static final String[] LANGUAGE_FALLBACK = {"ru-RU", "uz-UZ", "tr-TR", "en-US"};
+    private int currentLangIdx = 0;
+    private int errorStreak = 0;
+    private static final int MAX_ERROR_STREAK = 5;
+
     private SpeechRecognizer recognizer;
     private Handler mainHandler;
     private PowerManager.WakeLock wakeLock;
@@ -197,11 +206,20 @@ public class MicService extends Service {
 
         @Override
         public void onError(int error) {
+            // Til qo'llab-quvvatlanmasligi yoki uzoq jim qolish — keyingi tilga o'tish
+            errorStreak++;
+            if (errorStreak >= MAX_ERROR_STREAK
+                    && currentLangIdx < LANGUAGE_FALLBACK.length - 1) {
+                currentLangIdx++;
+                errorStreak = 0;
+                Log.i(TAG, "Tilga o'tildi: " + LANGUAGE_FALLBACK[currentLangIdx]);
+            }
             restartLater();
         }
 
         @Override
         public void onResults(Bundle results) {
+            errorStreak = 0;
             ArrayList<String> matches = results.getStringArrayList(
                     SpeechRecognizer.RESULTS_RECOGNITION
             );
@@ -221,7 +239,7 @@ public class MicService extends Service {
                 RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                 RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
         );
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, "uz-UZ");
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, LANGUAGE_FALLBACK[currentLangIdx]);
         // Wake word'ni real vaqtda topish uchun partial natijalar yoqilgan
         intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
         intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getPackageName());
@@ -267,20 +285,41 @@ public class MicService extends Service {
     private boolean matchesWakeWord(String text) {
         // So'z chegarasiga e'tibor: "niyat" alohida so'z yoki gap boshida
         // bo'lishi kerak — "muniyat", "qaniyat" kabi qismli mosliklarga
-        // tushib qolmaslik uchun.
-        String[] needles = {"niyat", "neyat", "nyat", "niyot", "niayat"};
+        // tushib qolmaslik uchun. Lekin chap chegara yumshatilgan — gap
+        // boshida punctuatsiya bo'lmasligi mumkin, va STT ba'zan bo'sh
+        // joy qo'ymaydi.
+        String[] needles = {
+                // Lotin yozuvi (uz-UZ, en-US, tr-TR)
+                "niyat", "niyyat", "neyat", "neyyat", "nyat",
+                "niyot", "niayat", "niat", "naat", "niat",
+                "neat", "nyat", "nay at", "nee yat",
+                // Rus tilida transkripsiya (ru-RU eng keng tarqalgan til)
+                "ниат", "нийат", "ниять", "няат", "нят",
+                "неат", "нияти", "нияту", "нияту", "нияты",
+                // Boshqa variantlar
+                "nijat", "nijot", "ниджат"
+        };
         for (String n : needles) {
             int idx = text.indexOf(n);
             while (idx >= 0) {
-                boolean leftOk = idx == 0 || !Character.isLetterOrDigit(text.charAt(idx - 1));
+                // Chap chegara: gap boshida yoki harf/raqam bo'lmasligi kerak
+                boolean leftOk = idx == 0
+                        || !isWordChar(text.charAt(idx - 1));
+                // O'ng chegara: so'z oxiri yoki harf/raqam bo'lmasligi kerak
+                // YOKI so'z kichik bo'lsa (3-5 harf) — biroz erkin
                 int endIdx = idx + n.length();
                 boolean rightOk = endIdx >= text.length()
-                        || !Character.isLetterOrDigit(text.charAt(endIdx));
+                        || !isWordChar(text.charAt(endIdx))
+                        || n.length() >= 4; // 4+ harf bo'lsa suffiks ham OK ("niyatim", "niyaty")
                 if (leftOk && rightOk) return true;
                 idx = text.indexOf(n, idx + 1);
             }
         }
         return false;
+    }
+
+    private boolean isWordChar(char c) {
+        return Character.isLetterOrDigit(c);
     }
 
     private void saveTranscript(String text) {

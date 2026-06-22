@@ -14,17 +14,23 @@ import { useSpeechRecognition } from "./use-speech";
 
 type WakeWordEvent = { text: string; at: number };
 
+// Wake word naqshlari — ko'p variant: lotin va kirilcha, qo'shimchasiz va
+// qo'shimcha bilan, fonetik buzuqliklar bilan. "muniyat" kabi to'g'ri
+// boshqa so'zlarda xato uyg'otmaslik uchun chap chegara qat'iy, lekin o'ng
+// — yumshoqroq ("niyatim", "niyatga" ham OK).
 const WAKE_PATTERNS = [
-  /\bniyat\b/i,
-  /\bneyat\b/i,
-  /\bnyat\b/i,
-  /\bniyot\b/i,
-  /\bniayat\b/i,
+  // Lotin
+  /(?:^|\s)(niyyat|niyat|neyat|neyyat|nyat|niyot|niayat|niat|naat|neat|nijat|nijot)\b/i,
+  // Lotin — qo'shimcha bilan (niyatim, niyatga, niyaty)
+  /(?:^|\s)(niyat|niyyat|niyot)\w{0,4}\b/i,
+  // Kirilcha
+  /(?:^|\s)(ниат|нийат|ниять|няат|нят|неат|нияти|нияту|нияты|ниджат)\b/iu,
+  /(?:^|\s)(ниат|нийат|ниять)\w{0,4}\b/iu,
 ];
 
 function isWakePhrase(text: string): boolean {
   if (!text) return false;
-  const cleaned = text.toLowerCase().trim();
+  const cleaned = ` ${text.toLowerCase().trim()}`;
   return WAKE_PATTERNS.some((re) => re.test(cleaned));
 }
 
