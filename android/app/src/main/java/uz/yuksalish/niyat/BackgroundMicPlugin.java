@@ -13,16 +13,20 @@
 
 package uz.yuksalish.niyat;
 
+import android.Manifest;
 import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
+
+import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -84,6 +88,18 @@ public class BackgroundMicPlugin extends Plugin {
     @PluginMethod
     public void start(PluginCall call) {
         Context ctx = getContext();
+        // Mikrofon ruxsati grant qilinmagan bo'lsa, foreground service'ni
+        // ishga tushirishga URINMAYMIZ. Android 14+ da foregroundServiceType
+        // "microphone" RECORD_AUDIO permission talab qiladi, aks holda
+        // SecurityException tashlanadi va ilova crash bo'ladi.
+        int perm = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO);
+        if (perm != PackageManager.PERMISSION_GRANTED) {
+            JSObject ret = new JSObject();
+            ret.put("started", false);
+            ret.put("reason", "mic_permission_denied");
+            call.resolve(ret);
+            return;
+        }
         // Boot receiver uchun saqlaymiz — telefon qayta yuklangandan keyin avtomatik
         prefs().edit().putBoolean(PREFS_ENABLED_KEY, true).apply();
         Intent intent = new Intent(ctx, MicService.class);
@@ -93,9 +109,14 @@ public class BackgroundMicPlugin extends Plugin {
             } else {
                 ctx.startService(intent);
             }
-            call.resolve();
+            JSObject ret = new JSObject();
+            ret.put("started", true);
+            call.resolve(ret);
         } catch (Exception e) {
-            call.reject("start xato: " + e.getMessage());
+            JSObject ret = new JSObject();
+            ret.put("started", false);
+            ret.put("reason", e.getMessage());
+            call.resolve(ret);
         }
     }
 

@@ -32,6 +32,28 @@ const IS_NATIVE = Capacitor.isNativePlatform();
 
 export type Transcript = { text: string; at: number };
 
+// Mikrofon ruxsati grant qilinganmi tekshirish. APK Android WebView'da
+// `navigator.permissions.query` ishlaydi.
+async function hasMicPermission(): Promise<boolean> {
+  if (typeof navigator === "undefined") return false;
+  // 1) Permissions API orqali (eng aniq)
+  try {
+    const perms = (navigator as Navigator & {
+      permissions?: { query: (q: { name: string }) => Promise<{ state: string }> };
+    }).permissions;
+    if (perms && typeof perms.query === "function") {
+      const res = await perms.query({ name: "microphone" });
+      if (res.state === "granted") return true;
+      if (res.state === "denied") return false;
+      // "prompt" — hali so'ralmagan, false qaytaramiz (avto-start xohlamaymiz)
+      return false;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
 export function useBackgroundMic(enabled: boolean) {
   useEffect(() => {
     if (!IS_NATIVE) return;
@@ -45,28 +67,43 @@ export function useBackgroundMic(enabled: boolean) {
       return;
     }
 
-    // 3 sekund kuting — MainApp UI to'liq mount bo'lsin va foydalanuvchi
-    // birinchi ekranni ko'rsin. Shundan keyingina foreground service'ni
-    // ishga tushiramiz. Aks holda Android service'ni "uncategorized
-    // background start" deb hisoblab ilovani majburiy yopib qo'yishi mumkin.
-    const startTimer = window.setTimeout(() => {
+    let cancelled = false;
+    let retryTimer: number | null = null;
+
+    const tryStart = async () => {
+      if (cancelled) return;
+      // Avval mikrofon ruxsati grant qilinganmi tekshiramiz. Ruxsat yo'q
+      // bo'lsa, foreground service ochish Android 14+ da SecurityException
+      // beradi va ilova crash bo'ladi. Ruxsat foydalanuvchi voice mode'ni
+      // ochganda so'raladi.
+      const granted = await hasMicPermission();
+      if (!granted) {
+        // 5 soniyadan keyin qayta tekshiramiz — foydalanuvchi voice mode
+        // ochib mikrofon ruxsatini bersa, biz darhol ulanamiz.
+        retryTimer = window.setTimeout(() => void tryStart(), 5000);
+        return;
+      }
       try {
-        void BackgroundMic.start().catch((err) => {
+        await BackgroundMic.start().catch((err) => {
           console.debug("[bg-mic] start failed (yumshoq)", err);
         });
-        const token =
-          typeof window !== "undefined"
-            ? window.localStorage.getItem("niyat:auth:token")
-            : null;
+        const token = window.localStorage.getItem("niyat:auth:token");
         const apiBase =
           (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
         void BackgroundMic.saveAuth({ token, apiBase }).catch(() => {});
       } catch (err) {
         console.warn("[bg-mic] plugin chaqiruv xatosi (yumshoq)", err);
       }
-    }, 3000);
+    };
 
-    return () => window.clearTimeout(startTimer);
+    // 3 sekund kuting — MainApp UI to'liq mount bo'lsin
+    const startTimer = window.setTimeout(() => void tryStart(), 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(startTimer);
+      if (retryTimer) window.clearTimeout(retryTimer);
+    };
   }, [enabled]);
 }
 

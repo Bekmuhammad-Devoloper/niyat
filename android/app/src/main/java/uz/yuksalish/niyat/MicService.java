@@ -82,7 +82,16 @@ public class MicService extends Service {
         mainHandler = new Handler(Looper.getMainLooper());
         networkExecutor = Executors.newSingleThreadExecutor();
         acquireWakeLock();
-        startForegroundCompat();
+        try {
+            startForegroundCompat();
+        } catch (Exception e) {
+            // Android 14+ da RECORD_AUDIO ruxsati yo'q bo'lsa
+            // foregroundServiceType="microphone" SecurityException tashlaydi.
+            // Ilovani crash qildirmaymiz — faqat servis to'xtaydi.
+            Log.w(TAG, "startForeground xato — servis to'xtaydi", e);
+            stopSelf();
+            return;
+        }
         scheduleWatchdog();
     }
 
@@ -162,11 +171,20 @@ public class MicService extends Service {
                         ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
                 );
                 return;
+            } catch (SecurityException se) {
+                // RECORD_AUDIO yo'q — Android 14+ specifik xato. Caller'ga
+                // tashlab beramiz, ilovani crash qildirmasdan to'xtab qolamiz.
+                throw se;
             } catch (Exception e) {
                 Log.w(TAG, "FOREGROUND_SERVICE_TYPE_MICROPHONE yoq", e);
             }
         }
-        startForeground(NOTIFICATION_ID, notification);
+        try {
+            startForeground(NOTIFICATION_ID, notification);
+        } catch (Exception e) {
+            Log.w(TAG, "startForeground xato", e);
+            throw e;
+        }
     }
 
     // ====================================================================
