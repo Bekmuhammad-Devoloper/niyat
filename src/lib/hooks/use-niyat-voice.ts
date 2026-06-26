@@ -1,31 +1,32 @@
 // Niyat ovozli muloqot rejimi — hands-free voice conversation pipeline.
 //
+// MVP 2 v2: Web Speech API ni tashlab, MediaRecorder + OpenAI Whisper
+// (server tomoni /api/stt) bilan ishlaymiz. Web Speech Capacitor WebView'da
+// ishonchli emas — Whisper esa har qanday qurilmada to'g'ri ishlaydi.
+//
 // Oqim:
 //   1. idle      — boshlash kutyapti
-//   2. listening — mikrofon yoniq, foydalanuvchi gapiryapti
-//   3. processing — silence detected, AI'ga yuborildi, javob kutilmoqda
-//   4. speaking   — AI javobi TTS bilan ovozli o'qilmoqda
-//   5. idle yoki listening (loopMode true bo'lsa — qayta listening'ga qaytadi)
+//   2. listening — mikrofon yoniq, jim, foydalanuvchi gapirishini kutyapti
+//   3. recording  — audio yozilyapti, foydalanuvchi gapiryapti
+//   4. processing — Whisper transkripsiya + AI javob kutilmoqda
+//   5. speaking   — AI javobi TTS bilan ovozli o'qilmoqda
+//   6. listening qaytadan (hands-free loop)
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSpeechRecognition } from "./use-speech";
 import { useCoach } from "./use-coach";
 import { useCoachTTS } from "./use-coach-tts";
 import { useUserProfile } from "./use-user-profile";
+import { useWhisperStt } from "./use-whisper-stt";
 import { executePhoneCommands } from "@/lib/phone-control";
 import type { CoachMessage } from "@/lib/niyat-data";
 
 export type VoiceState =
   | "idle"
   | "listening"
+  | "recording"
   | "processing"
   | "speaking"
   | "error";
-
-// Foydalanuvchi gapirib tugatganini aniqlash — silence (tinch) muddati.
-// Web Speech API o'zining tugashini emas, isFinal eventini chaqiradi, lekin
-// alwaysOn rejimida foydalanuvchi pauza qilganda ham auto-yuboramiz.
-const SILENCE_DELAY_MS = 1500;
 
 // Voice mode'da default samimiy "yaqin do'st" personality
 const VOICE_PERSONALITY = "friend" as const;
@@ -40,52 +41,31 @@ export function useNiyatVoice(opts: { active: boolean }) {
   const [userTranscript, setUserTranscript] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  // Ovozli muloqotga maxsus mahalliy tarix — coach sessions bilan birga,
-  // lekin har bir voice mode boshlanganda yangi boshlanadi (kontekst toza)
+  const [audioLevel, setAudioLevel] = useState(0);
   const [messages, setMessages] = useState<CoachMessage[]>([]);
 
-  const silenceTimerRef = useRef<number | null>(null);
-  const lastTranscriptRef = useRef("");
-  // Yangi foydalanuvchi gap boshlaganda eski AI javobni tozalash uchun
-  const isSpeakingRef = useRef(false);
+  // Holatlarni state-machine'da tinglash uchun
+  const stateRef = useRef<VoiceState>("idle");
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
-  const stt = useSpeechRecognition({
-    lang: "uz-UZ",
-    alwaysOn: active,
-    muted: !active || state === "speaking" || state === "processing",
-    onResult: (text, isFinal) => {
-      if (!text.trim()) return;
-      setUserTranscript(text);
-      lastTranscriptRef.current = text;
-
-      // Foydalanuvchi gap boshladi — agar AI gapirayotgan bo'lsa, to'xtatamiz
-      if (isSpeakingRef.current) {
-        tts.stop();
-        isSpeakingRef.current = false;
-      }
-
-      // Silence taymerni qayta tiklash — foydalanuvchi gapiryapti
-      if (silenceTimerRef.current) {
-        window.clearTimeout(silenceTimerRef.current);
-      }
-      // Final natija yoki interim ham — biroz kuting va yuboring
-      const delay = isFinal ? 600 : SILENCE_DELAY_MS;
-      silenceTimerRef.current = window.setTimeout(() => {
-        const finalText = lastTranscriptRef.current.trim();
-        if (finalText.length > 0) {
-          void sendToAI(finalText);
-        }
-      }, delay);
-    },
-  });
+  // Boshlang'ich salomlashish bo'lganmi?
+  const greetedRef = useRef(false);
 
   // AI'ga yuborish + TTS bilan o'qish + commands bajarish
   const sendToAI = useCallback(
     async (text: string) => {
-      if (state === "processing" || state === "speaking") return;
+      if (
+        stateRef.current === "processing" ||
+        stateRef.current === "speaking"
+      ) {
+        return;
+      }
       setErrorMsg(null);
       setState("processing");
       setAiResponse("");
+      setUserTranscript(text);
 
       const userMsg: CoachMessage = {
         id: `voice-u-${Date.now()}`,
@@ -100,8 +80,6 @@ export function useNiyatVoice(opts: { active: boolean }) {
           history: messages,
           userText: text,
           userContext: { firstName: profile.firstName },
-          // Voice mode'da har doim "yaqin do'st" ohangi — settings'dan qat'i nazar.
-          // Foydalanuvchi xohlasa keyinroq override qilamiz.
           personality: VOICE_PERSONALITY,
           onDelta: (partial) => setAiResponse(partial),
         });
@@ -116,27 +94,22 @@ export function useNiyatVoice(opts: { active: boolean }) {
         setAiResponse(result.reply);
 
         // Telefon boshqaruv buyruqlarini ajratib bajarib, gapdan tozalaymiz
-        const { cleanText, executed } = await executePhoneCommands(
-          result.reply,
-        );
+        const { cleanText, executed } = await executePhoneCommands(result.reply);
         if (executed.length > 0) {
           console.log("[niyat-voice] commands executed:", executed);
         }
 
         // TTS — yumshoq ayol ovozi
         setState("speaking");
-        isSpeakingRef.current = true;
         try {
           await tts.speak(cleanText, "shimmer", "default");
         } catch (err) {
           console.warn("[niyat-voice] TTS failed", err);
         }
-        isSpeakingRef.current = false;
 
-        // TTS tugagach — qaytadan listening'ga (hands-free loop)
+        // TTS tugagach — qayta listening
+        setUserTranscript("");
         if (active) {
-          setUserTranscript("");
-          lastTranscriptRef.current = "";
           setState("listening");
         } else {
           setState("idle");
@@ -149,19 +122,48 @@ export function useNiyatVoice(opts: { active: boolean }) {
         setState("error");
       }
     },
-    [active, coach, messages, profile.firstName, tts, state],
+    [active, coach, messages, profile.firstName, tts],
   );
 
-  // active o'zgarganda — STT ni boshlash/to'xtatish
+  // Whisper STT hookini ulash — faqat AI gapirmayotgan paytda faol
+  const sttActive =
+    active && state !== "processing" && state !== "speaking" && state !== "error";
+
+  const stt = useWhisperStt({
+    active: sttActive,
+    onAudioLevel: setAudioLevel,
+    onTranscript: (text) => {
+      if (!text.trim()) return;
+      void sendToAI(text.trim());
+    },
+    onError: (msg) => setErrorMsg(msg),
+  });
+
+  // STT holatini bizning VoiceState'ga moslash
+  useEffect(() => {
+    if (!active) return;
+    if (stateRef.current === "processing" || stateRef.current === "speaking") {
+      return; // o'z holatimiz ustun
+    }
+    if (stt.state === "recording") setState("recording");
+    else if (stt.state === "listening") setState("listening");
+    else if (stt.state === "transcribing") setState("processing");
+    else if (stt.state === "error") {
+      setState("error");
+      if (stt.error) setErrorMsg(stt.error);
+    } else if (stt.state === "requesting") setState("listening");
+  }, [stt.state, stt.error, active]);
+
+  // active o'zgarganda — boshlash/to'xtatish
   useEffect(() => {
     if (active) {
-      setState("listening");
       setUserTranscript("");
       setAiResponse("");
       setErrorMsg(null);
-      stt.start();
-      // Salomlashish — birinchi marta ochilganda iliq salom
-      if (messages.length === 0) {
+
+      // Birinchi marta ochilganda iliq salom
+      if (!greetedRef.current) {
+        greetedRef.current = true;
         const greeting = greetingFor(profile.firstName);
         const aiMsg: CoachMessage = {
           id: `voice-greeting-${Date.now()}`,
@@ -172,62 +174,45 @@ export function useNiyatVoice(opts: { active: boolean }) {
         setMessages([aiMsg]);
         setAiResponse(greeting);
         setState("speaking");
-        isSpeakingRef.current = true;
         void tts
           .speak(greeting, "shimmer", "default")
           .catch(() => undefined)
           .finally(() => {
-            isSpeakingRef.current = false;
             if (active) setState("listening");
+            else setState("idle");
           });
       }
     } else {
-      stt.stop();
       tts.stop();
-      if (silenceTimerRef.current) {
-        window.clearTimeout(silenceTimerRef.current);
-        silenceTimerRef.current = null;
-      }
+      greetedRef.current = false;
+      setMessages([]);
       setState("idle");
       setUserTranscript("");
     }
-    // stt va tts referenslari har render'da yangidan — ataylab deps emas
+    // ataylab tts/profile deps emas — infinite loop'dan saqlanish uchun
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active]);
 
-  // Tashqaridan yopish/qayta boshlash
+  // Tashqaridan to'xtatish
   const interrupt = useCallback(() => {
     tts.stop();
-    isSpeakingRef.current = false;
-    if (silenceTimerRef.current) {
-      window.clearTimeout(silenceTimerRef.current);
-      silenceTimerRef.current = null;
-    }
+    stt.interrupt();
     setUserTranscript("");
     setAiResponse("");
-    lastTranscriptRef.current = "";
     if (active) setState("listening");
-  }, [active, tts]);
-
-  // Cleanup
-  useEffect(() => {
-    return () => {
-      if (silenceTimerRef.current) {
-        window.clearTimeout(silenceTimerRef.current);
-      }
-    };
-  }, []);
+  }, [active, stt, tts]);
 
   return {
     state,
     userTranscript,
     aiResponse,
     error: errorMsg,
+    audioLevel,
     messages,
     interrupt,
-    sttSupported: stt.supported,
+    sttSupported: true,
     sttError: stt.error,
-    activeLang: stt.activeLang,
+    activeLang: "uz (Whisper)",
   };
 }
 
@@ -238,5 +223,6 @@ function greetingFor(firstName: string): string {
     `${name}, salom. Eshityapman seni, gapir.`,
     `Salom ${name}, qalaysan? Bugun nima xayolingda?`,
   ];
-  return options[Math.floor(Date.now() / 1000) % options.length];
+  // Date.now ishlatish kerak emas — har ochilganda navbatma-navbat
+  return options[Math.floor(Math.random() * options.length)];
 }

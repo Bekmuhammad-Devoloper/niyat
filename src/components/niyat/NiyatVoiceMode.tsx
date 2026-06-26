@@ -32,7 +32,9 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
     if (v.error) return "Xato — qayta urinib ko'ring";
     switch (v.state) {
       case "listening":
-        return "Tinglayapman...";
+        return "Eshityapman...";
+      case "recording":
+        return "Yozyapman...";
       case "processing":
         return "O'ylayapman...";
       case "speaking":
@@ -76,7 +78,7 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
 
       {/* Orb — animatsiyali */}
       <div className="flex-1 flex flex-col items-center justify-center px-6">
-        <VoiceOrb state={v.state} />
+        <VoiceOrb state={v.state} level={v.audioLevel} />
 
         {/* AI javobi */}
         {v.aiResponse && (
@@ -85,8 +87,8 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
           </p>
         )}
 
-        {/* Foydalanuvchi transkripti (live) */}
-        {v.userTranscript && v.state === "listening" && (
+        {/* Foydalanuvchi transkripti (so'nggi) */}
+        {v.userTranscript && (
           <p className="mt-4 text-center text-[13px] text-primary italic max-w-[300px]">
             “{v.userTranscript}”
           </p>
@@ -108,15 +110,30 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
 
       {/* Bottom — yordamchi */}
       <div className="px-6 pb-8 flex items-center justify-center gap-2 text-[11px] text-tertiary">
-        {v.state === "listening" ? (
+        {v.state === "recording" ? (
+          <>
+            <Mic size={12} className="text-primary animate-pulse" />
+            <span>Yozyapman — gapirib bo'lganingizda jim turing</span>
+          </>
+        ) : v.state === "listening" ? (
           <>
             <Mic size={12} className="text-primary" />
-            <span>Pauza qilganingizda yuboriladi · {v.activeLang}</span>
+            <span>Eshityapman · gapiring</span>
+          </>
+        ) : v.state === "processing" ? (
+          <>
+            <Mic size={12} />
+            <span>Whisper transkripsiya qilyapti...</span>
+          </>
+        ) : v.state === "speaking" ? (
+          <>
+            <MicOff size={12} />
+            <span>Mikrofon vaqtincha jim</span>
           </>
         ) : (
           <>
             <MicOff size={12} />
-            <span>Mikrofon to'xtatilgan</span>
+            <span>Tayyorlanyapman</span>
           </>
         )}
       </div>
@@ -124,10 +141,17 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
   );
 }
 
-function VoiceOrb({ state }: { state: ReturnType<typeof useNiyatVoice>["state"] }) {
+function VoiceOrb({
+  state,
+  level = 0,
+}: {
+  state: ReturnType<typeof useNiyatVoice>["state"];
+  level?: number;
+}) {
   const colors = {
     idle: ["#3a3a30", "#1a1a14"],
     listening: ["#D4B86A", "#8a7340"],
+    recording: ["#f0c853", "#9a7a30"],
     processing: ["#7ea2ff", "#3a4a8a"],
     speaking: ["#7fdeb0", "#2a6a55"],
     error: ["#c85450", "#5a2a28"],
@@ -135,13 +159,17 @@ function VoiceOrb({ state }: { state: ReturnType<typeof useNiyatVoice>["state"] 
   const [outer, inner] = colors[state] ?? colors.idle;
 
   const pulseClass =
-    state === "listening"
-      ? "niyat-orb-pulse-strong"
-      : state === "processing"
-        ? "niyat-orb-pulse-fast"
-        : state === "speaking"
-          ? "niyat-orb-pulse-slow"
+    state === "processing"
+      ? "niyat-orb-pulse-fast"
+      : state === "speaking"
+        ? "niyat-orb-pulse-slow"
+        : state === "listening"
+          ? "niyat-orb-pulse-strong"
           : "";
+
+  // Recording paytida audio level'iga qarab orbni shishirib turamiz
+  const scale =
+    state === "recording" ? 1 + Math.min(0.35, level * 12) : 1;
 
   return (
     <div className="relative h-[200px] w-[200px]">
@@ -172,7 +200,8 @@ function VoiceOrb({ state }: { state: ReturnType<typeof useNiyatVoice>["state"] 
         style={{
           background: `radial-gradient(circle at 30% 30%, ${outer} 0%, ${inner} 60%, #000 100%)`,
           boxShadow: `0 0 40px ${outer}55, inset 0 0 30px rgba(255,255,255,0.08)`,
-          transition: "background 600ms ease, box-shadow 600ms ease",
+          transform: `scale(${scale})`,
+          transition: "background 600ms ease, box-shadow 600ms ease, transform 100ms ease-out",
         }}
       />
       {/* Ichki yorug'lik */}

@@ -90,6 +90,8 @@ export function MicDebugSheet({ open, onClose }: { open: boolean; onClose: () =>
               />
             </button>
           </div>
+          {/* Mikrofon ruxsati holati */}
+          <MicPermissionStatus />
           {!isNative && (
             <p className="mt-2 text-[11px] text-tertiary leading-relaxed">
               Bu sahifa faqat APK telefon ilovasida ma'lumot beradi. Web
@@ -163,6 +165,81 @@ export function MicDebugSheet({ open, onClose }: { open: boolean; onClose: () =>
         </p>
       </div>
     </BottomSheet>
+  );
+}
+
+// Mikrofon ruxsati holati — Permissions API orqali tekshiriladi va
+// foydalanuvchiga aniq holatni ko'rsatadi. APK'da WebView ham app-level
+// mic permission'ga ulanadi, shu sabab "denied" bo'lsa Android Settings'dan
+// qo'lda berish kerak.
+function MicPermissionStatus() {
+  const [status, setStatus] = useState<"granted" | "denied" | "prompt" | "unknown">(
+    "unknown",
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const perms = (navigator as Navigator & {
+          permissions?: {
+            query: (q: { name: string }) => Promise<{ state: string }>;
+          };
+        }).permissions;
+        if (!perms?.query) {
+          if (!cancelled) setStatus("unknown");
+          return;
+        }
+        const res = await perms.query({ name: "microphone" });
+        if (!cancelled) setStatus(res.state as typeof status);
+      } catch {
+        if (!cancelled) setStatus("unknown");
+      }
+    };
+    void check();
+    const id = window.setInterval(check, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  const requestPermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+    } catch {
+      /* ignore */
+    }
+  };
+
+  if (status === "unknown") return null;
+  const color =
+    status === "granted"
+      ? "text-emerald-400"
+      : status === "denied"
+        ? "text-destructive"
+        : "text-amber-400";
+  const label =
+    status === "granted"
+      ? "✓ Mikrofon ruxsati berilgan"
+      : status === "denied"
+        ? "✗ Mikrofon ruxsati rad etilgan — Android Settings'dan qayta bering"
+        : "? Mikrofon ruxsati hali so'ralmagan";
+
+  return (
+    <div className="mt-2 flex items-center justify-between gap-2">
+      <p className={`text-[11px] ${color}`}>{label}</p>
+      {status === "prompt" && (
+        <button
+          type="button"
+          onClick={requestPermission}
+          className="text-[10px] text-primary underline"
+        >
+          So'rash
+        </button>
+      )}
+    </div>
   );
 }
 

@@ -4,6 +4,7 @@ import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { handleCoachRequest } from "./lib/api/coach-handler";
 import { handleTtsRequest } from "./lib/api/tts-handler";
+import { handleSttRequest } from "./lib/api/stt-handler";
 import { handleAuthRequest } from "./lib/api/auth-handler";
 import { handleAdminRequest } from "./lib/api/admin-handler";
 import { handleAnnouncementsRequest } from "./lib/api/announcements-handler";
@@ -144,6 +145,14 @@ export default {
         const secrets = env as EnvWithSecrets | undefined;
         return addCorsHeaders(
           await handleTtsRequest(request, secrets?.OPENAI_API_KEY, secrets?.DB),
+          request,
+        );
+      }
+      // OpenAI Whisper STT — audio'dan matn (voice mode)
+      if (url.pathname === "/api/stt") {
+        const secrets = env as EnvWithSecrets | undefined;
+        return addCorsHeaders(
+          await handleSttRequest(request, secrets?.OPENAI_API_KEY, secrets?.DB),
           request,
         );
       }

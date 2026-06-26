@@ -128,6 +128,14 @@ function niyatBackendDevPlugin(): Plugin {
             return pipeResponse(response, res);
           }
 
+          // /api/stt — OpenAI Whisper (audio → text)
+          if (url === "/api/stt" && method === "POST") {
+            const { handleSttRequest } = await import("./src/lib/api/stt-handler");
+            const db = await getDb();
+            const response = await handleSttRequest(request, secrets.openai, db as never);
+            return pipeResponse(response, res);
+          }
+
           // /api/auth/*
           if (url.startsWith("/api/auth/")) {
             const { handleAuthRequest } = await import("./src/lib/api/auth-handler");
