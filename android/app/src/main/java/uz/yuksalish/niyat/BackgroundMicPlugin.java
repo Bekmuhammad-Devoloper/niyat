@@ -59,10 +59,7 @@ public class BackgroundMicPlugin extends Plugin {
             public void onReceive(Context ctx, Intent intent) {
                 if (intent == null) return;
                 String text = intent.getStringExtra(MicService.EXTRA_WAKE_TEXT);
-                JSObject data = new JSObject();
-                data.put("text", text != null ? text : "");
-                data.put("at", System.currentTimeMillis());
-                notifyListeners("wakeWord", data);
+                emitWakeWord(text);
             }
         };
         IntentFilter filter = new IntentFilter(MicService.ACTION_WAKE_WORD);
@@ -74,6 +71,33 @@ public class BackgroundMicPlugin extends Plugin {
                 getContext().registerReceiver(wakeReceiver, filter);
             }
         } catch (Exception ignored) {}
+
+        // Plugin yuklanganda — MainActivity wake intent bilan ochilgan bo'lsa,
+        // pendingWakeWordText'ni o'qib darhol JS event'ni yuboramiz.
+        // JS listener'lar hali registratsiya qilmagan bo'lishi mumkin —
+        // shuning uchun biroz kutish kerak.
+        try {
+            new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                    this::notifyWakeWordIfPending,
+                    1500
+            );
+        } catch (Exception ignored) {}
+    }
+
+    // MainActivity tomonidan chaqiriladi (onNewIntent) yoki Plugin load()'da
+    // — pendingWakeWordText bor bo'lsa JS event'ni yuborib tozalaymiz.
+    public void notifyWakeWordIfPending() {
+        String pending = MainActivity.pendingWakeWordText;
+        if (pending == null) return;
+        MainActivity.pendingWakeWordText = null;
+        emitWakeWord(pending);
+    }
+
+    private void emitWakeWord(String text) {
+        JSObject data = new JSObject();
+        data.put("text", text != null ? text : "");
+        data.put("at", System.currentTimeMillis());
+        notifyListeners("wakeWord", data);
     }
 
     @Override

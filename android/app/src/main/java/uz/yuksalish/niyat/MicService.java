@@ -275,28 +275,96 @@ public class MicService extends Service {
     }
 
     // Wake word ("niyat" yoki "Niyat") topilishini tekshirish va event broadcast.
-    // Foydalanuvchi tabiiy nutqida "niyat" so'zi ko'p uchrasa ham, bu uyg'otish
-    // OK — voice mode ochilsa foydalanuvchi gapirsa AI javob beradi, gapirmasa
-    // qisqa vaqt ichida yopilib qoladi.
+    // 3 ta yo'l bilan ovozli muloqotni ishga tushuramiz:
+    //   1) Broadcast — agar ilova background'da tirik bo'lsa (Plugin receiver ushlaydi)
+    //   2) MainActivity'ni to'g'ridan-to'g'ri ochish — ilova killed bo'lsa
+    //   3) Full-screen notification — Activity launch cheklangan telefonlarda zaxira
     private void checkWakeWord(String raw) {
         if (raw == null || raw.trim().isEmpty()) return;
         long now = SystemClock.elapsedRealtime();
         if (now - lastWakeAt < WAKE_COOLDOWN_MS) return; // throttle
 
         String lower = raw.toLowerCase().trim();
-        // Asosiy variantlar — Android STT uz-UZ qo'llamasa ru/tr accent bilan
-        // "neyat", "nyat", "niyot" kabi yozadi. Hammasini ushlaymiz.
         if (matchesWakeWord(lower)) {
             lastWakeAt = now;
+            Log.i(TAG, "Wake word topildi: " + raw);
+
+            // 1) Broadcast — ilova tirik bo'lsa receiver ushlaydi
             try {
                 Intent broadcast = new Intent(ACTION_WAKE_WORD);
                 broadcast.putExtra(EXTRA_WAKE_TEXT, raw);
-                broadcast.setPackage(getPackageName()); // ichki broadcast
+                broadcast.setPackage(getPackageName());
                 sendBroadcast(broadcast);
-                Log.i(TAG, "Wake word topildi: " + raw);
             } catch (Exception e) {
                 Log.w(TAG, "wake broadcast xato", e);
             }
+
+            // 2) MainActivity'ni to'g'ridan-to'g'ri ochish.
+            // Android 10+ "background activity launch"ni cheklaydi, lekin
+            // ko'p qurilmalarda barmoq bilan tegirilmaganda baribir ochiladi
+            // (xususan SYSTEM_ALERT_WINDOW yoki ekran yoqilgan paytda).
+            Intent launch = new Intent(this, MainActivity.class);
+            launch.putExtra("from_wake_word", true);
+            launch.putExtra("wake_text", raw);
+            launch.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            try {
+                startActivity(launch);
+            } catch (Exception e) {
+                Log.w(TAG, "Activity launch xato (background restriction)", e);
+            }
+
+            // 3) Heads-up full-screen notification — Activity launch
+            // bloklangan telefonlarda foydalanuvchi notification'ga bossa
+            // ilova ochiladi va voice mode avtomatik chiqadi.
+            showWakeWordNotification(raw);
+        }
+    }
+
+    private static final String WAKE_CHANNEL_ID = "niyat_wake_word";
+    private static final int WAKE_NOTIF_ID = 9913;
+
+    private void showWakeWordNotification(String text) {
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+                    && nm.getNotificationChannel(WAKE_CHANNEL_ID) == null) {
+                NotificationChannel ch = new NotificationChannel(
+                        WAKE_CHANNEL_ID,
+                        "Niyat — \"Niyat\" so'zi uyg'otish",
+                        NotificationManager.IMPORTANCE_HIGH);
+                ch.setDescription("\"Niyat\" so'zi eshitilganda ovozli muloqotni ochish");
+                ch.setShowBadge(false);
+                nm.createNotificationChannel(ch);
+            }
+
+            Intent launch = new Intent(this, MainActivity.class);
+            launch.putExtra("from_wake_word", true);
+            launch.putExtra("wake_text", text);
+            launch.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+            int piFlags = PendingIntent.FLAG_UPDATE_CURRENT;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                piFlags |= PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pi = PendingIntent.getActivity(this, 0, launch, piFlags);
+
+            NotificationCompat.Builder b = new NotificationCompat.Builder(this, WAKE_CHANNEL_ID)
+                    .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                    .setContentTitle("🎙 Niyat sizni eshityapti")
+                    .setContentText("Bosing — javob bera boshlayman")
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setAutoCancel(true)
+                    .setContentIntent(pi)
+                    .setFullScreenIntent(pi, true)
+                    .setTimeoutAfter(15_000);
+            nm.notify(WAKE_NOTIF_ID, b.build());
+        } catch (Exception e) {
+            Log.w(TAG, "wake notification xato", e);
         }
     }
 

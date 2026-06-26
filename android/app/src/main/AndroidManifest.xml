@@ -105,6 +105,13 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Bildirishnomalar (namoz vaqti eslatmalari uchun) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Wake word ("Niyat") topilganda — ilova yopiq bo'lsa ham to'liq ekran
+         notification chiqib avtomatik MainActivity'ni ochish uchun -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+    <!-- Wake word topilganda overlay orqali Activity'ni avtomatik ochish
+         (Android 10+ background activity launch'ni cheklaydi, lekin
+         overlay yoki SAW ruxsati bilan mumkin) -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <!-- PhoneControl plugin'i — boshqa ilovalarni qidirish uchun
          (Android 11+ packageManager.queryIntentActivities() oq ro'yxati).
