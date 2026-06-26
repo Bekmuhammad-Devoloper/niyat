@@ -24,5 +24,12 @@ export default defineConfig({
   define: {
     // Capacitor ichida ekanligini aniqlash uchun
     "import.meta.env.VITE_IS_MOBILE": JSON.stringify(true),
+    // Mobil APK Capacitor WebView'da `https://localhost` dan yuklanadi.
+    // Backend API esa GCE serverda (`my.niyat.tech`). Aks holda fetch'lar
+    // capacitor://localhost'ga ketib /api/stt, /api/tts, /api/coach
+    // ishlamaydi.
+    "import.meta.env.VITE_API_BASE": JSON.stringify(
+      process.env.VITE_API_BASE || "https://my.niyat.tech",
+    ),
   },
 });

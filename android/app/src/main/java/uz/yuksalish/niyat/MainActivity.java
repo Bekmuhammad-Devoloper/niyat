@@ -2,6 +2,9 @@ package uz.yuksalish.niyat;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
+import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -23,6 +26,23 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(VoiceReminderPlugin.class);
         registerPlugin(PhoneControlPlugin.class);
         super.onCreate(savedInstanceState);
+
+        // WebView ichidagi JS getUserMedia / Web Audio so'rovlariga ruxsat
+        // berish — ilova RECORD_AUDIO ga ega bo'lsa ham, WebView alohida
+        // so'raydi. Bu override'siz Whisper STT (voice mode) ishlamaydi.
+        WebView webView = getBridge().getWebView();
+        if (webView != null) {
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public void onPermissionRequest(PermissionRequest request) {
+                    if (request != null) {
+                        try {
+                            request.grant(request.getResources());
+                        } catch (Exception ignored) {}
+                    }
+                }
+            });
+        }
     }
 
     @Override
