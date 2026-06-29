@@ -97,6 +97,37 @@ jobs:
           echo "--- birinchi 5 qator ---"
           head -5 /tmp/deploy.sh
 
+      # Server'dagi .env ni yangilash — OPENAI_API_KEY (va boshqa sekretlar).
+      # Eski qatorni o'chirib yangisini qo'shamiz, qolgan sozlamalar (GEMINI,
+      # TELEGRAM ...) tegmagan holda saqlanadi. Kalit SSH stdin orqali uzatiladi
+      # — buyruq satrida ko'rinmaydi.
+      - name: Update server .env with GitHub Secrets
+        env:
+          HOST: ${{ secrets.SERVER_HOST }}
+          USER_NAME: ${{ secrets.SERVER_USER }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "⚠️  OPENAI_API_KEY sekret bo'sh — .env yangilanmaydi"
+            exit 0
+          fi
+          printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY" \
+            | ssh -o StrictHostKeyChecking=no "${USER_NAME}@${HOST}" '
+              set -e
+              cd /home/bekmuhammad_devoloper/niyat
+              NEW_LINE=$(cat)
+              if [ -f .env ]; then
+                cp .env .env.bak
+                grep -v "^OPENAI_API_KEY=" .env > .env.tmp || true
+                mv .env.tmp .env
+              else
+                touch .env
+              fi
+              echo "$NEW_LINE" >> .env
+              chmod 600 .env
+              echo "✓ .env yangilandi"
+            '
+
       - name: Run deploy on server
         env:
           HOST: ${{ secrets.SERVER_HOST }}
