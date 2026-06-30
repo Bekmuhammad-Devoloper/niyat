@@ -126,9 +126,7 @@ jobs:
           } | ssh -o StrictHostKeyChecking=no "${USER_NAME}@${HOST}" '
             set -e
             cd /home/bekmuhammad_devoloper/niyat
-            # Workerd (wrangler dev) .dev.vars ni o'qiydi, .env emas.
-            # Shu sababli har ikkala faylga bir vaqtda yozamiz — kelajakda
-            # asosiy yo'l .dev.vars bo'lib qoladi.
+            # Wrangler dev reads .dev.vars not .env, so we write both.
             for TARGET in .dev.vars .env; do
               [ -f "$TARGET" ] && cp "$TARGET" "${TARGET}.bak"
               touch "$TARGET"
@@ -145,7 +143,7 @@ jobs:
               UPDATED+=("$KEY")
             done
             chmod 600 .dev.vars .env
-            echo "✓ .dev.vars va .env yangilandi: ${UPDATED[*]:-hech narsa}"
+            echo "OK .dev.vars and .env updated: ${UPDATED[*]:-none}"
             echo "── Server-side .dev.vars summary ──"
             echo "Path: $(pwd)/.dev.vars"
             echo "Lines in .dev.vars: $(wc -l < .dev.vars)"
