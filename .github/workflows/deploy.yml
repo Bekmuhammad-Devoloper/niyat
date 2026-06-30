@@ -97,36 +97,38 @@ jobs:
           echo "--- birinchi 5 qator ---"
           head -5 /tmp/deploy.sh
 
-      # Server'dagi .env ni yangilash — OPENAI_API_KEY (va boshqa sekretlar).
-      # Eski qatorni o'chirib yangisini qo'shamiz, qolgan sozlamalar (GEMINI,
-      # TELEGRAM ...) tegmagan holda saqlanadi. Kalit SSH stdin orqali uzatiladi
-      # — buyruq satrida ko'rinmaydi.
+      # Server'dagi .env ni yangilash — har kalit alohida yangilanadi.
+      # Qolgan sozlamalar (GEMINI, TELEGRAM, va h.k.) tegmagan holda saqlanadi.
+      # Kalit qiymatlari SSH stdin orqali uzatiladi — buyruq satrida ko'rinmaydi.
       - name: Update server .env with GitHub Secrets
         env:
           HOST: ${{ secrets.SERVER_HOST }}
           USER_NAME: ${{ secrets.SERVER_USER }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -z "$OPENAI_API_KEY" ]; then
-            echo "⚠️  OPENAI_API_KEY sekret bo'sh — .env yangilanmaydi"
-            exit 0
-          fi
-          printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY" \
-            | ssh -o StrictHostKeyChecking=no "${USER_NAME}@${HOST}" '
-              set -e
-              cd /home/bekmuhammad_devoloper/niyat
-              NEW_LINE=$(cat)
-              if [ -f .env ]; then
-                cp .env .env.bak
-                grep -v "^OPENAI_API_KEY=" .env > .env.tmp || true
-                mv .env.tmp .env
-              else
-                touch .env
-              fi
-              echo "$NEW_LINE" >> .env
-              chmod 600 .env
-              echo "✓ .env yangilandi"
-            '
+          # Har bir sekret uchun "NAME=VALUE" satrini qator-qator stdin ga yozamiz.
+          # Server tarafdan grep bilan eski qatorlarni olib tashlab, yangilarini qo'shamiz.
+          {
+            [ -n "$OPENAI_API_KEY" ] && printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY"
+            [ -n "$ANTHROPIC_API_KEY" ] && printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY"
+          } | ssh -o StrictHostKeyChecking=no "${USER_NAME}@${HOST}" '
+            set -e
+            cd /home/bekmuhammad_devoloper/niyat
+            [ -f .env ] && cp .env .env.bak
+            touch .env
+            UPDATED=()
+            while IFS= read -r LINE; do
+              [ -z "$LINE" ] && continue
+              KEY="${LINE%%=*}"
+              grep -v "^${KEY}=" .env > .env.tmp || true
+              mv .env.tmp .env
+              echo "$LINE" >> .env
+              UPDATED+=("$KEY")
+            done
+            chmod 600 .env
+            echo "✓ .env yangilandi: ${UPDATED[*]:-hech narsa}"
+          '
 
       - name: Run deploy on server
         env:

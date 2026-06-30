@@ -20,6 +20,7 @@ import {
 import { useSpeechRecognition } from "@/lib/hooks/use-speech";
 import { autoCapitalize } from "@/lib/text-utils";
 import { Flag } from "../Flag";
+import { useConfirmDialog } from "../useConfirmDialog";
 
 const tabs = [
   { key: "yearly", label: "Yillik" },
@@ -43,6 +44,7 @@ type CadenceKind =
   | "monthly_specific"; // oyning aniq sanalari (1, 15 ...)
 
 export function GoalsScreen() {
+  const { confirm, dialog: confirmDialog } = useConfirmDialog();
   const [active, setActive] = useState<TabKey>("weekly");
   const { goals, add, update, remove, toggleToday, getChildrenOf, getParentOf } = useGoals();
   // editingId: null = forma yopiq; "new" = yangi qo'shish; "<id>" = tahrirlash
@@ -505,12 +507,19 @@ export function GoalsScreen() {
                 }
                 onToggleToday={() => toggleToday(g.id)}
                 onEdit={() => startEditing(g)}
-                onRemove={() => {
+                onRemove={async () => {
                   const childCount = getChildrenOf(g.id).length;
                   const msg = childCount
-                    ? `"${g.title}" maqsadini o'chiramizmi? ${childCount} ta kichik maqsad mustaqil qoladi.`
-                    : `"${g.title}" maqsadini o'chiramizmi?`;
-                  if (confirm(msg)) {
+                    ? `"${g.title}" maqsadini o'chiramizmi?\n\n${childCount} ta kichik maqsad mustaqil qoladi.`
+                    : `"${g.title}" maqsadini o'chirmoqchimisiz?`;
+                  const ok = await confirm({
+                    title: "Maqsadni o'chirish",
+                    message: msg,
+                    confirmLabel: "O'chirish",
+                    cancelLabel: "Bekor qilish",
+                    danger: true,
+                  });
+                  if (ok) {
                     remove(g.id);
                     toast.info("Maqsad o'chirildi");
                   }
@@ -530,6 +539,7 @@ export function GoalsScreen() {
       >
         <Plus size={18} /> <span className="text-[13px] font-semibold">Yangi maqsad</span>
       </button>
+      {confirmDialog}
     </div>
   );
 }

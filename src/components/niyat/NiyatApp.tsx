@@ -220,11 +220,14 @@ function MainApp({
   usePushSubscribe();
   // Joylashuvni serverga jonatish
   useLocationSync();
-  // Orqa fon mikrofoni — agar foydalanuvchi yoqsa YOKI "Niyat" deyish bilan
-  // uyg'otish yoqilgan bo'lsa (default). Aks holda APK yopilganda wake word
-  // ishlamas edi. Birinchi mount'da Android mikrofon ruxsatini so'raydi.
+  // Voice mode ochiq paytda BackgroundMic'ni pauza qilish — aks holda
+  // service mikrofonni egallab oladi va Whisper getUserMedia "Could not
+  // start audio source" xatosi beradi. Voice mode yopilgach yana ishga
+  // tushadi.
+  const [voiceModeOpen, setVoiceModeOpen] = useState(false);
   useBackgroundMic(
-    micSettings.voice.micBackground || micSettings.voice.wakeWordEnabled,
+    (micSettings.voice.micBackground || micSettings.voice.wakeWordEnabled)
+      && !voiceModeOpen,
   );
   // Coach'dan tashqari ekranda global mic — micAlwaysOn bo'lsa
   useGlobalMicListener(
@@ -241,7 +244,6 @@ function MainApp({
   // Foydalanuvchi "Niyat" desa, ovozli muloqot rejimi avtomatik ochiladi.
   // Native (APK): BackgroundMic foreground service ishlasagina ishlaydi.
   // Web: brauzer mikrofonidan tinglaydi (foydalanuvchi ruxsat bergan bo'lsa).
-  const [voiceModeOpen, setVoiceModeOpen] = useState(false);
   useWakeWord({
     enabled: micSettings.voice.wakeWordEnabled,
     voiceModeOpen,
