@@ -29,12 +29,20 @@ import android.provider.Settings;
 import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 
-@CapacitorPlugin(name = "BackgroundMic")
+@CapacitorPlugin(
+    name = "BackgroundMic",
+    permissions = {
+        @Permission(alias = "microphone", strings = { Manifest.permission.RECORD_AUDIO })
+    }
+)
 public class BackgroundMicPlugin extends Plugin {
 
     private static final String PREFS_NAME = "niyat_mic";
@@ -107,6 +115,44 @@ public class BackgroundMicPlugin extends Plugin {
             wakeReceiver = null;
         }
         super.handleOnDestroy();
+    }
+
+    // ====================================================================
+    // RECORD_AUDIO ruxsati — Capacitor permission system orqali.
+    //
+    // checkMicPermission()    — joriy holatni qaytaradi (granted/denied/prompt)
+    // requestMicPermission()  — OS dialog'ni MAJBURIY ko'rsatadi
+    //
+    // Voice mode va Coach mic JS taraflari getUserMedia chaqirishdan oldin
+    // shu metodlarni ishlatadi. Aks holda Capacitor WebView ba'zan OS
+    // dialog'ni jim ravishda o'tkazib yuboradi va getUserMedia "Could not
+    // start audio source" qaytaradi.
+    // ====================================================================
+    @PluginMethod
+    public void checkMicPermission(PluginCall call) {
+        JSObject ret = new JSObject();
+        PermissionState state = getPermissionState("microphone");
+        ret.put("microphone", state == null ? "prompt" : state.toString());
+        call.resolve(ret);
+    }
+
+    @PluginMethod
+    public void requestMicPermission(PluginCall call) {
+        if (getPermissionState("microphone") == PermissionState.GRANTED) {
+            JSObject ret = new JSObject();
+            ret.put("microphone", "granted");
+            call.resolve(ret);
+            return;
+        }
+        requestPermissionForAlias("microphone", call, "micPermissionResult");
+    }
+
+    @PermissionCallback
+    private void micPermissionResult(PluginCall call) {
+        JSObject ret = new JSObject();
+        PermissionState state = getPermissionState("microphone");
+        ret.put("microphone", state == null ? "prompt" : state.toString());
+        call.resolve(ret);
     }
 
     @PluginMethod

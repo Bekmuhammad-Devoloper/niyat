@@ -275,9 +275,30 @@ function MainAppInner({
   });
 
   // FAB bosilganda voice mode'ni ochish. Coordinator orqali mikrofonni
-  // so'raymiz — BackgroundMic to'liq pauza qilingach voice mode ochiladi.
+  // so'raymiz — OS RECORD_AUDIO ruxsati va BackgroundMic teardown'idan
+  // KEYIN voice mode ochiladi. Ruxsat berilmasa, foydalanuvchiga
+  // sozlamalarga o'tish tugmasi bilan toast ko'rsatamiz.
   const openVoice = async () => {
-    await requestMic("voice-mode");
+    const granted = await requestMic("voice-mode");
+    if (!granted) {
+      const { toast } = await import("sonner");
+      toast.error(
+        "Mikrofon ruxsati berilmadi. Sozlamalar → Niyat → Ruxsatlar → Mikrofon",
+        {
+          duration: 6000,
+          action: {
+            label: "Sozlamalar",
+            onClick: async () => {
+              const { openMicPermissionSettings } = await import(
+                "@/lib/hooks/use-background-mic"
+              );
+              await openMicPermissionSettings();
+            },
+          },
+        },
+      );
+      return;
+    }
     setVoiceModeOpen(true);
   };
   // Voice mode yopilganda mic'ni release qilamiz va BackgroundMic qayta

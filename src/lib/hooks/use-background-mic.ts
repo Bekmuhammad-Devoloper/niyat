@@ -24,7 +24,16 @@ interface BackgroundMicPlugin {
   openAppSettings(): Promise<void>;
   disableAutoRevoke(): Promise<void>;
   saveAuth(opts: { token: string | null; apiBase: string }): Promise<void>;
+  checkMicPermission(): Promise<{ microphone: PermissionStateName }>;
+  requestMicPermission(): Promise<{ microphone: PermissionStateName }>;
 }
+
+export type PermissionStateName = "granted" | "denied" | "prompt" | "prompt-with-rationale";
+
+export type EnsureMicResult = {
+  state: PermissionStateName;
+  granted: boolean;
+};
 
 const BackgroundMic = registerPlugin<BackgroundMicPlugin>("BackgroundMic");
 
@@ -38,6 +47,60 @@ export async function stopBackgroundMicAndWait(): Promise<void> {
     await BackgroundMic.stop();
   } catch (err) {
     console.debug("[bg-mic] stopAndWait failed", err);
+  }
+}
+
+// Mikrofon ruxsatini majburiy ravishda olishga harakat qilamiz.
+// 1) Native (APK): Plugin orqali Capacitor permission system'ni chaqiramiz —
+//    bu OS RECORD_AUDIO dialog'ini ko'rsatishi kafolatlangan.
+// 2) Web/fallback: navigator.mediaDevices.getUserMedia bilan brauzer dialog
+//    chiqariladi, keyin stream darhol to'xtatamiz.
+//
+// Voice mode va Coach mic getUserMedia'ni chaqirishdan oldin shu helper'ni
+// ishlatadi — aks holda WebChromeClient ba'zan OS dialog'ni o'tkazib yuborib,
+// getUserMedia "Could not start audio source" yoki "not-allowed" beradi.
+export async function ensureMicPermission(): Promise<EnsureMicResult> {
+  // 1) Native — Capacitor permission system
+  if (IS_NATIVE) {
+    try {
+      const check = await BackgroundMic.checkMicPermission();
+      if (check.microphone === "granted") {
+        return { state: "granted", granted: true };
+      }
+      const req = await BackgroundMic.requestMicPermission();
+      return { state: req.microphone, granted: req.microphone === "granted" };
+    } catch (err) {
+      console.warn("[ensure-mic] native plugin failed", err);
+      // Fallback: getUserMedia
+    }
+  }
+  // 2) Web yoki fallback — getUserMedia bilan dialog chiqarish
+  try {
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      return { state: "denied", granted: false };
+    }
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // Darhol to'xtatamiz — bu faqat permission trigger uchun edi
+    stream.getTracks().forEach((t) => t.stop());
+    return { state: "granted", granted: true };
+  } catch (err) {
+    const e = err as Error & { name?: string };
+    if (e?.name === "NotAllowedError") {
+      return { state: "denied", granted: false };
+    }
+    // NotReadableError yoki boshqa — ruxsat bor lekin mic band
+    console.warn("[ensure-mic] getUserMedia failed", err);
+    return { state: "denied", granted: false };
+  }
+}
+
+// Foydalanuvchini Android Settings → Niyat ga jonatish (qo'lda ruxsat berish uchun).
+export async function openMicPermissionSettings(): Promise<void> {
+  if (!IS_NATIVE) return;
+  try {
+    await BackgroundMic.openAppSettings();
+  } catch (err) {
+    console.warn("[ensure-mic] openAppSettings failed", err);
   }
 }
 

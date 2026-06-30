@@ -11,6 +11,9 @@ import {
   getBackgroundTranscripts,
   clearBackgroundTranscripts,
   isBackgroundMicRunning,
+  ensureMicPermission,
+  openMicPermissionSettings,
+  stopBackgroundMicAndWait,
   type Transcript,
 } from "@/lib/hooks/use-background-mic";
 import { Capacitor } from "@capacitor/core";
@@ -106,6 +109,9 @@ export function MicDebugSheet({ open, onClose }: { open: boolean; onClose: () =>
             </p>
           )}
         </div>
+
+        {/* Mic test diagnostic — getUserMedia haqiqatda nima qaytaradi */}
+        <MicTestDiagnostic />
 
         {/* Transkriptlar */}
         <div className="rounded-2xl bg-card border border-border">
@@ -239,6 +245,117 @@ function MicPermissionStatus() {
           So'rash
         </button>
       )}
+    </div>
+  );
+}
+
+// Mic test — getUserMedia haqiqatda nima qaytaradi (aniq xato turi)
+function MicTestDiagnostic() {
+  const [status, setStatus] = useState<{
+    ok: boolean;
+    label: string;
+    detail: string;
+  } | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  const runTest = async () => {
+    setTesting(true);
+    setStatus(null);
+    try {
+      // 1) Avval BackgroundMic'ni to'liq to'xtatamiz
+      await stopBackgroundMicAndWait();
+      // 2) Capacitor permission system'ni majburiy chaqirib OS dialog'ni chiqaramiz
+      const perm = await ensureMicPermission();
+      if (!perm.granted) {
+        setStatus({
+          ok: false,
+          label: `Ruxsat: ${perm.state}`,
+          detail:
+            "OS RECORD_AUDIO berilmadi. Sozlamalar tugmasini bosib qo'lda yoqing.",
+        });
+        return;
+      }
+      // 3) getUserMedia'ni sinab ko'ramiz
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const tracks = stream.getAudioTracks();
+      const trackInfo = tracks
+        .map((t) => `${t.label || "?"} (${t.readyState})`)
+        .join(", ");
+      stream.getTracks().forEach((t) => t.stop());
+      setStatus({
+        ok: true,
+        label: "✓ Mikrofon ishlaydi",
+        detail: `Audio track: ${trackInfo}`,
+      });
+    } catch (err) {
+      const e = err as Error & { name?: string };
+      const name = e?.name ?? "Error";
+      const msg = e?.message ?? String(err);
+      let advice = "";
+      if (name === "NotAllowedError") {
+        advice =
+          "OS RECORD_AUDIO ruxsati yo'q. Sozlamalar → Niyat → Ruxsatlar → Mikrofon → Allow.";
+      } else if (name === "NotReadableError") {
+        advice =
+          "Mikrofon BAND. Boshqa ilovani yoping (Telegram qo'ng'iroq, Google Assistant, ovoz yozuvchi).";
+      } else if (name === "NotFoundError") {
+        advice = "Mikrofon topilmadi (qurilma muammosi).";
+      } else if (name === "OverconstrainedError") {
+        advice = "Audio constraints muammosi. Brauzer audio formatlarini cheklamoqda.";
+      } else {
+        advice = "Noma'lum xato. Ilovani qayta boshlang yoki APK'ni qayta o'rnating.";
+      }
+      setStatus({
+        ok: false,
+        label: `${name}`,
+        detail: `${msg}\n\n${advice}`,
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl bg-card border border-border p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[12px] font-semibold text-foreground">
+          Mikrofon sinash (diagnostic)
+        </p>
+        <button
+          type="button"
+          onClick={runTest}
+          disabled={testing}
+          className="px-3 h-8 rounded-lg bg-primary text-primary-foreground text-[11px] font-medium active:scale-95 transition disabled:opacity-50"
+        >
+          {testing ? "Sinanmoqda..." : "Sinab ko'rish"}
+        </button>
+      </div>
+      {status && (
+        <div
+          className={`rounded-lg p-3 text-[11px] leading-relaxed ${
+            status.ok
+              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/30"
+              : "bg-destructive/10 text-destructive border border-destructive/30"
+          }`}
+        >
+          <p className="font-semibold mb-1">{status.label}</p>
+          <p className="whitespace-pre-line">{status.detail}</p>
+          {!status.ok && (
+            <button
+              type="button"
+              onClick={() => void openMicPermissionSettings()}
+              className="mt-2 inline-flex items-center gap-1 text-[11px] underline"
+            >
+              Telefon sozlamalarini ochish →
+            </button>
+          )}
+        </div>
+      )}
+      <p className="text-[10px] text-tertiary leading-relaxed">
+        Bu tugma 1) BackgroundMic'ni to'xtatadi, 2) RECORD_AUDIO ruxsatini
+        so'raydi, 3) getUserMedia'ni sinaydi va aniq xato turini ko'rsatadi.
+        Voice mode ishlamasa shu yerda nima muammo ekanligini bilasiz.
+      </p>
     </div>
   );
 }

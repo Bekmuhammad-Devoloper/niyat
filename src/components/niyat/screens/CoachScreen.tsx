@@ -69,7 +69,9 @@ export function CoachScreen() {
   const { request: requestMic, release: releaseMic } = useMicCoordinator();
 
   // micActive flip qilinganda BackgroundMic'ni avval to'liq to'xtatib
-  // yoki qayta tiklab beramiz — aks holda "Could not start audio source".
+  // yoki qayta tiklab beramiz. Ruxsat berilmasa, micActive'ni qaytaramiz
+  // false'ga — bu kombinatsiya useWhisperStt'ni boshlamaydi va
+  // foydalanuvchiga aniq xato xabari ko'rinadi.
   useEffect(() => {
     if (!micActive) {
       releaseMic("coach");
@@ -78,8 +80,28 @@ export function CoachScreen() {
     }
     let cancelled = false;
     void (async () => {
-      await requestMic("coach");
-      if (!cancelled) setMicReady(true);
+      const granted = await requestMic("coach");
+      if (cancelled) return;
+      if (!granted) {
+        toast.error(
+          "Mikrofon ruxsati berilmadi. Sozlamalar → Niyat → Ruxsatlar → Mikrofon",
+          {
+            duration: 6000,
+            action: {
+              label: "Sozlamalar",
+              onClick: async () => {
+                const { openMicPermissionSettings } = await import(
+                  "@/lib/hooks/use-background-mic"
+                );
+                await openMicPermissionSettings();
+              },
+            },
+          },
+        );
+        setMicActive(false);
+        return;
+      }
+      setMicReady(true);
     })();
     return () => {
       cancelled = true;
