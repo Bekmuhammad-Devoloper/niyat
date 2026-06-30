@@ -1,6 +1,12 @@
 import "./lib/error-capture";
 
+import { loadDotEnvIfPresent } from "./lib/load-env";
 import { consumeLastCapturedError } from "./lib/error-capture";
+
+// Node.js (GCE) muhitida .env faylni process.env'ga yuklaymiz. Cloudflare
+// Workers'da no-op. Buni eng birinchi qatorda chaqirish — server xizmati
+// ishga tushishi bilan secret'lar tayyor bo'lishi uchun.
+loadDotEnvIfPresent();
 import { renderErrorPage } from "./lib/error-page";
 import { handleCoachRequest } from "./lib/api/coach-handler";
 import { handleTtsRequest } from "./lib/api/tts-handler";
@@ -26,6 +32,25 @@ type EnvWithSecrets = {
   VAPID_SUBJECT?: string;
   DB?: D1Database;
 };
+
+// Cloudflare Workers'da `env` parametri secret'larni o'z ichiga oladi.
+// Node.js (GCE)'da `env` bo'sh, shuning uchun `process.env`'ga tushib
+// o'tamiz. Bu wrapper ikkala muhitda ham ishlaydi.
+function getSecrets(env: unknown): EnvWithSecrets {
+  const e = (env ?? {}) as EnvWithSecrets;
+  const proc: NodeJS.ProcessEnv =
+    typeof process !== "undefined" && process?.env ? process.env : {};
+  return {
+    GEMINI_API_KEY: e.GEMINI_API_KEY ?? proc.GEMINI_API_KEY,
+    ANTHROPIC_API_KEY: e.ANTHROPIC_API_KEY ?? proc.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: e.OPENAI_API_KEY ?? proc.OPENAI_API_KEY,
+    ADMIN_PASSWORD: e.ADMIN_PASSWORD ?? proc.ADMIN_PASSWORD,
+    VAPID_PUBLIC_KEY: e.VAPID_PUBLIC_KEY ?? proc.VAPID_PUBLIC_KEY,
+    VAPID_PRIVATE_KEY: e.VAPID_PRIVATE_KEY ?? proc.VAPID_PRIVATE_KEY,
+    VAPID_SUBJECT: e.VAPID_SUBJECT ?? proc.VAPID_SUBJECT,
+    DB: e.DB,
+  };
+}
 
 let serverEntryPromise: Promise<ServerEntry> | undefined;
 
@@ -126,7 +151,7 @@ export default {
 
       // Niyat AI Murabbiy API — TanStack handler'idan oldin interceptsiya.
       if (url.pathname === "/api/coach") {
-        const secrets = env as EnvWithSecrets | undefined;
+        const secrets = getSecrets(env);
         return addCorsHeaders(
           await handleCoachRequest(
             request,
@@ -142,7 +167,7 @@ export default {
       }
       // OpenAI TTS — Murabbiy uchun tabiiy ovoz
       if (url.pathname === "/api/tts") {
-        const secrets = env as EnvWithSecrets | undefined;
+        const secrets = getSecrets(env);
         return addCorsHeaders(
           await handleTtsRequest(request, secrets?.OPENAI_API_KEY, secrets?.DB),
           request,
@@ -150,7 +175,7 @@ export default {
       }
       // OpenAI Whisper STT — audio'dan matn (voice mode)
       if (url.pathname === "/api/stt") {
-        const secrets = env as EnvWithSecrets | undefined;
+        const secrets = getSecrets(env);
         return addCorsHeaders(
           await handleSttRequest(request, secrets?.OPENAI_API_KEY, secrets?.DB),
           request,
@@ -158,7 +183,7 @@ export default {
       }
       // Auth — register, login, me
       if (url.pathname.startsWith("/api/auth/")) {
-        const secrets = env as EnvWithSecrets | undefined;
+        const secrets = getSecrets(env);
         return addCorsHeaders(
           await handleAuthRequest(request, url.pathname, secrets?.DB),
           request,
@@ -166,7 +191,7 @@ export default {
       }
       // Public e'lonlar (admin tomonidan yuborilgan)
       if (url.pathname === "/api/announcements") {
-        const secrets = env as EnvWithSecrets | undefined;
+        const secrets = getSecrets(env);
         return addCorsHeaders(
           await handleAnnouncementsRequest(request, secrets?.DB),
           request,
@@ -179,7 +204,7 @@ export default {
         url.pathname === "/api/profile/mic-heartbeat" ||
         url.pathname === "/api/profile/audio-sample"
       ) {
-        const secrets = env as EnvWithSecrets | undefined;
+        const secrets = getSecrets(env);
         return addCorsHeaders(
           await handleProfileSyncRequest(request, url.pathname, secrets?.DB),
           request,
@@ -187,7 +212,7 @@ export default {
       }
       // Push notifications
       if (url.pathname.startsWith("/api/push/")) {
-        const secrets = env as EnvWithSecrets | undefined;
+        const secrets = getSecrets(env);
         return addCorsHeaders(
           await handlePushRequest(request, url.pathname, secrets?.DB, {
             VAPID_PUBLIC_KEY: secrets?.VAPID_PUBLIC_KEY,
@@ -197,7 +222,7 @@ export default {
       }
       // Admin — foydalanuvchilar, statistika, premium
       if (url.pathname.startsWith("/api/admin/")) {
-        const secrets = env as EnvWithSecrets | undefined;
+        const secrets = getSecrets(env);
         return addCorsHeaders(
           await handleAdminRequest(
             request,
