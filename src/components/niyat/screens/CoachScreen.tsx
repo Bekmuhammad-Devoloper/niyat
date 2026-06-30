@@ -22,7 +22,7 @@ import { useUserProfile, isPremiumActive } from "@/lib/hooks/use-user-profile";
 import { useCoach } from "@/lib/hooks/use-coach";
 import { useCoachSessions, type ChatSession } from "@/lib/hooks/use-coach-sessions";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { useWhisperStt } from "@/lib/hooks/use-whisper-stt";
+import { useNativeStt } from "@/lib/hooks/use-native-stt";
 import { sendMicHeartbeat } from "@/lib/hooks/use-background-mic";
 import { useMicCoordinator } from "../MicCoordinator";
 import { useCoachTTS } from "@/lib/hooks/use-coach-tts";
@@ -59,67 +59,12 @@ export function CoachScreen() {
   const tts = useCoachTTS();
   const [usingRealAI, setUsingRealAI] = useState<boolean | null>(null);
 
-  // Mikrofon (Whisper STT). Web Speech API'dan voz kechdik — Android WebView'da
-  // ishonchli emas (crbug.com/487255), ko'p qurilmalarda not-allowed xato beradi.
-  // Whisper esa /api/stt orqali server tomonda transkripsiya qiladi, MediaRecorder
-  // hamma joyda ishlaydi. micActive true bo'lsa ovoz tinglanadi, jim qolsangiz
-  // yoziladi va matn input maydoniga qo'shiladi.
-  const [micActive, setMicActive] = useState(false);
-  const [micReady, setMicReady] = useState(false);
+  // Mikrofon (Native STT). Tap-to-talk: tugmani bosib gapirasiz, qaytadan
+  // bosasiz — audio Whisper API'ga jo'natiladi va matn input maydoniga
+  // qo'shiladi. WebView getUserMedia muammosi yo'q — to'g'ridan-to'g'ri
+  // Java MediaRecorder ishlatiladi.
   const { request: requestMic, release: releaseMic } = useMicCoordinator();
-
-  // micActive flip qilinganda BackgroundMic'ni avval to'liq to'xtatib
-  // yoki qayta tiklab beramiz. Ruxsat berilmasa, micActive'ni qaytaramiz
-  // false'ga — bu kombinatsiya useWhisperStt'ni boshlamaydi va
-  // foydalanuvchiga aniq xato xabari ko'rinadi.
-  useEffect(() => {
-    if (!micActive) {
-      releaseMic("coach");
-      setMicReady(false);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const granted = await requestMic("coach");
-      if (cancelled) return;
-      if (!granted) {
-        toast.error(
-          "Mikrofon ruxsati berilmadi. Sozlamalar → Niyat → Ruxsatlar → Mikrofon",
-          {
-            duration: 6000,
-            action: {
-              label: "Sozlamalar",
-              onClick: async () => {
-                const { openMicPermissionSettings } = await import(
-                  "@/lib/hooks/use-background-mic"
-                );
-                await openMicPermissionSettings();
-              },
-            },
-          },
-        );
-        setMicActive(false);
-        return;
-      }
-      setMicReady(true);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [micActive, requestMic, releaseMic]);
-
-  // Sozlamadagi micAlwaysOn — boshlang'ich qiymat sifatida
-  useEffect(() => {
-    if (settings.voice.micAlwaysOn) setMicActive(true);
-  }, [settings.voice.micAlwaysOn]);
-
-  const stt = useWhisperStt({
-    active:
-      micActive
-      && micReady
-      && !tts.isPlaying
-      && !tts.isLoading
-      && !coach.isPending,
+  const stt = useNativeStt({
     onTranscript: (text) => {
       setDraft((prev) => {
         const next = prev ? `${prev} ${text}` : text;
@@ -132,7 +77,45 @@ export function CoachScreen() {
       toast.error(msg);
     },
   });
-  const isListening = stt.state === "listening" || stt.state === "recording";
+  const isListening = stt.isRecording;
+  // settings keep API parity but no longer used here
+  void settings;
+
+  // Coordinator orqali BackgroundMic'ni pauza qilish
+  const handleMicToggle = async () => {
+    if (stt.isRecording) {
+      await stt.stop();
+      releaseMic("coach");
+      return;
+    }
+    const granted = await requestMic("coach");
+    if (!granted) {
+      toast.error(
+        "Mikrofon ruxsati berilmadi. Sozlamalar → Niyat → Ruxsatlar → Mikrofon",
+        {
+          duration: 6000,
+          action: {
+            label: "Sozlamalar",
+            onClick: async () => {
+              const { openMicPermissionSettings } = await import(
+                "@/lib/hooks/use-background-mic"
+              );
+              await openMicPermissionSettings();
+            },
+          },
+        },
+      );
+      return;
+    }
+    await stt.start();
+  };
+
+  // Unmount paytida coordinator'ni bo'shatish
+  useEffect(() => {
+    return () => {
+      releaseMic("coach");
+    };
+  }, [releaseMic]);
 
   const isCoachTyping = coach.isPending && !streamingText;
 
@@ -369,21 +352,16 @@ export function CoachScreen() {
           </button>
           <button
             type="button"
-            aria-label={micActive ? "Mikrofonni to'xtatish" : "Ovozli xabar"}
-            onClick={() => {
-              if (typeof navigator === "undefined" || !navigator.mediaDevices) {
-                toast.info("Brauzeringiz ovozli kiritishni qo'llamaydi");
-                return;
-              }
-              setMicActive((v) => !v);
-            }}
+            aria-label={isListening ? "Yozishni to'xtatish" : "Ovozli xabar"}
+            onClick={() => void handleMicToggle()}
+            disabled={stt.isTranscribing}
             className={`h-9 w-9 rounded-xl flex items-center justify-center active:scale-95 transition ${
               isListening
                 ? "bg-destructive/90 text-destructive-foreground pulse-gold"
-                : "bg-primary text-primary-foreground"
+                : "bg-primary text-primary-foreground disabled:opacity-40"
             }`}
           >
-            {micActive ? <MicOff size={16} /> : <Mic size={16} />}
+            {isListening ? <MicOff size={16} /> : <Mic size={16} />}
           </button>
         </div>
         <p className="text-center text-[10px] mt-1.5">
@@ -391,18 +369,16 @@ export function CoachScreen() {
             <span className="text-destructive">{stt.error}</span>
           ) : tts.isPlaying ? (
             <span className="text-tertiary">Murabbiy javob beryapti...</span>
-          ) : stt.state === "recording" ? (
-            <span className="text-primary inline-flex items-center gap-1">
-              Yozyapman — jim qoling, avtomatik yuboraman
+          ) : stt.isRecording ? (
+            <span className="text-primary">
+              Yozyapman — to'xtatish uchun yana bosing
             </span>
-          ) : stt.state === "listening" ? (
-            <span className="text-primary">Eshityapman — gapiring</span>
-          ) : stt.state === "transcribing" ? (
+          ) : stt.isTranscribing ? (
             <span className="text-tertiary">Matnga aylantiryapman...</span>
-          ) : micActive ? (
-            <span className="text-tertiary">Mikrofon tayyorlanyapti...</span>
           ) : (
-            <span className="text-tertiary">Ovozli xabar uchun mic bosing</span>
+            <span className="text-tertiary">
+              Ovozli xabar uchun mic bosing va gapiring
+            </span>
           )}
         </p>
       </form>

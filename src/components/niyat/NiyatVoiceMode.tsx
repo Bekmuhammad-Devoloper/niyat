@@ -1,16 +1,14 @@
-// Niyat ovozli muloqot rejimi — Siri/ChatGPT voice kabi to'liq ekran tajriba.
+// Niyat ovozli muloqot rejimi — to'liq ekran tap-to-talk tajriba.
 //
 // Foydalanuvchi tugmani bossa shu modal ochiladi:
 //   1. AI iltifot bilan salomlashadi (TTS)
-//   2. Mikrofon yoqiladi, foydalanuvchi gapiradi
-//   3. Pauza qilganda matn AI'ga yuboriladi
-//   4. AI ovozli javob beradi (TTS) — ichida telefon buyruqlari bo'lishi mumkin
-//   5. Buyruqlar avtomatik bajariladi (ilova ochish, qo'ng'iroq, alarm...)
-//   6. Yana mikrofon yoqiladi — hands-free
-// Pastdagi X bilan yopiladi.
+//   2. Foydalanuvchi katta mikrofon tugmasini bosib gapiradi
+//   3. Qaytadan bosadi → audio Whisper'ga jo'natiladi → AI javob beradi (TTS)
+//   4. Buyruqlar avtomatik bajariladi (ilova ochish, qo'ng'iroq, alarm...)
+// X bilan yopiladi.
 
 import { useEffect } from "react";
-import { X, Mic, MicOff } from "lucide-react";
+import { X, Mic, MicOff, Square, Loader2 } from "lucide-react";
 import { useNiyatVoice } from "@/lib/hooks/use-niyat-voice";
 
 export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -29,10 +27,8 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
   if (!open) return null;
 
   const stateLabel = (() => {
-    if (v.error) return "Xato — qayta urinib ko'ring";
+    if (v.error) return "Xato";
     switch (v.state) {
-      case "listening":
-        return "Eshityapman...";
       case "recording":
         return "Yozyapman...";
       case "processing":
@@ -42,9 +38,12 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
       case "error":
         return "Xato yuz berdi";
       default:
-        return "Tayyorlanyapman...";
+        return "Mikrofonni bosing va gapiring";
     }
   })();
+
+  const canPressMic =
+    v.state === "idle" || v.state === "recording" || v.state === "error";
 
   return (
     <div
@@ -76,9 +75,9 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
         </button>
       </div>
 
-      {/* Orb — animatsiyali */}
+      {/* Asosiy maydon */}
       <div className="flex-1 flex flex-col items-center justify-center px-6">
-        <VoiceOrb state={v.state} level={v.audioLevel} />
+        <VoiceOrb state={v.state} />
 
         {/* AI javobi */}
         {v.aiResponse && (
@@ -87,7 +86,7 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
           </p>
         )}
 
-        {/* Foydalanuvchi transkripti (so'nggi) */}
+        {/* Foydalanuvchi transkripti */}
         {v.userTranscript && (
           <p className="mt-4 text-center text-[13px] text-primary italic max-w-[300px]">
             “{v.userTranscript}”
@@ -95,47 +94,46 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
         )}
 
         {v.error && (
-          <p className="mt-6 text-center text-[12px] text-destructive">
+          <p className="mt-6 text-center text-[12px] text-destructive max-w-[320px] leading-relaxed">
             {v.error}
-          </p>
-        )}
-
-        {!v.sttSupported && (
-          <p className="mt-6 text-center text-[12px] text-amber-400/90 leading-relaxed">
-            Bu brauzer mikrofonni qo'llab-quvvatlamaydi. APK telefon ilovasidan
-            foydalaning.
           </p>
         )}
       </div>
 
-      {/* Bottom — yordamchi */}
-      <div className="px-6 pb-8 flex items-center justify-center gap-2 text-[11px] text-tertiary">
-        {v.state === "recording" ? (
-          <>
-            <Mic size={12} className="text-primary animate-pulse" />
-            <span>Yozyapman — gapirib bo'lganingizda jim turing</span>
-          </>
-        ) : v.state === "listening" ? (
-          <>
-            <Mic size={12} className="text-primary" />
-            <span>Eshityapman · gapiring</span>
-          </>
-        ) : v.state === "processing" ? (
-          <>
-            <Mic size={12} />
-            <span>Whisper transkripsiya qilyapti...</span>
-          </>
-        ) : v.state === "speaking" ? (
-          <>
-            <MicOff size={12} />
-            <span>Mikrofon vaqtincha jim</span>
-          </>
-        ) : (
-          <>
-            <MicOff size={12} />
-            <span>Tayyorlanyapman</span>
-          </>
-        )}
+      {/* Pastdagi yozish tugmasi */}
+      <div className="pb-10 px-6 flex flex-col items-center gap-3">
+        <button
+          type="button"
+          onClick={() => void v.toggleRecording()}
+          disabled={!canPressMic}
+          aria-label={v.isRecording ? "Yozishni to'xtatish" : "Yozishni boshlash"}
+          className={`h-20 w-20 rounded-full flex items-center justify-center transition-all ${
+            v.isRecording
+              ? "bg-destructive text-destructive-foreground shadow-2xl shadow-destructive/40 scale-110"
+              : v.state === "processing" || v.state === "speaking"
+                ? "bg-elevated/40 text-tertiary"
+                : "bg-primary text-primary-foreground shadow-xl shadow-primary/40 active:scale-95"
+          }`}
+        >
+          {v.isRecording ? (
+            <Square size={28} fill="currentColor" />
+          ) : v.state === "processing" ? (
+            <Loader2 size={32} className="animate-spin" />
+          ) : v.state === "speaking" ? (
+            <MicOff size={32} />
+          ) : (
+            <Mic size={32} />
+          )}
+        </button>
+        <p className="text-[11px] text-tertiary text-center max-w-[280px]">
+          {v.isRecording
+            ? "Yozyapman... gapirib bo'lganingizda yana bosing"
+            : v.state === "processing"
+              ? "Whisper transkripsiya qilyapti..."
+              : v.state === "speaking"
+                ? "Murabbiy javob beryapti"
+                : "Mikrofonni bosing va gapiring"}
+        </p>
       </div>
     </div>
   );
@@ -143,14 +141,11 @@ export function NiyatVoiceMode({ open, onClose }: { open: boolean; onClose: () =
 
 function VoiceOrb({
   state,
-  level = 0,
 }: {
   state: ReturnType<typeof useNiyatVoice>["state"];
-  level?: number;
 }) {
-  const colors = {
+  const colors: Record<typeof state, [string, string]> = {
     idle: ["#3a3a30", "#1a1a14"],
-    listening: ["#D4B86A", "#8a7340"],
     recording: ["#f0c853", "#9a7a30"],
     processing: ["#7ea2ff", "#3a4a8a"],
     speaking: ["#7fdeb0", "#2a6a55"],
@@ -163,50 +158,32 @@ function VoiceOrb({
       ? "niyat-orb-pulse-fast"
       : state === "speaking"
         ? "niyat-orb-pulse-slow"
-        : state === "listening"
+        : state === "recording"
           ? "niyat-orb-pulse-strong"
           : "";
 
-  // Recording paytida audio level'iga qarab orbni shishirib turamiz
-  const scale =
-    state === "recording" ? 1 + Math.min(0.35, level * 12) : 1;
-
   return (
-    <div className="relative h-[200px] w-[200px]">
-      {/* Tashqi halqalar — ripple effekt */}
+    <div className="relative h-[180px] w-[180px]">
       <div
         className="absolute inset-0 rounded-full opacity-20"
         style={{
           background: `radial-gradient(circle, ${outer} 0%, transparent 70%)`,
           animation:
-            state === "listening" || state === "speaking"
+            state === "recording" || state === "speaking"
               ? "niyat-orb-ripple 2.5s ease-out infinite"
               : "none",
         }}
       />
       <div
-        className="absolute inset-4 rounded-full opacity-30"
-        style={{
-          background: `radial-gradient(circle, ${outer} 0%, transparent 65%)`,
-          animation:
-            state === "listening" || state === "speaking"
-              ? "niyat-orb-ripple 2.5s ease-out infinite 0.5s"
-              : "none",
-        }}
-      />
-      {/* Asosiy orb */}
-      <div
-        className={`absolute inset-10 rounded-full ${pulseClass}`}
+        className={`absolute inset-8 rounded-full ${pulseClass}`}
         style={{
           background: `radial-gradient(circle at 30% 30%, ${outer} 0%, ${inner} 60%, #000 100%)`,
           boxShadow: `0 0 40px ${outer}55, inset 0 0 30px rgba(255,255,255,0.08)`,
-          transform: `scale(${scale})`,
-          transition: "background 600ms ease, box-shadow 600ms ease, transform 100ms ease-out",
+          transition: "background 600ms ease",
         }}
       />
-      {/* Ichki yorug'lik */}
       <div
-        className="absolute inset-16 rounded-full"
+        className="absolute inset-14 rounded-full"
         style={{
           background: `radial-gradient(circle, ${outer} 0%, transparent 60%)`,
           opacity: 0.5,

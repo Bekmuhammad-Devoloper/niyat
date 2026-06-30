@@ -29,6 +29,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(BackgroundMicPlugin.class);
         registerPlugin(VoiceReminderPlugin.class);
         registerPlugin(PhoneControlPlugin.class);
+        registerPlugin(AudioCapturePlugin.class);
         super.onCreate(savedInstanceState);
 
         // WebView ichidagi JS getUserMedia / Web Audio so'rovlariga ruxsat.
