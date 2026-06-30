@@ -42,9 +42,8 @@ function AdminSettingsPage() {
         </p>
         <ul className="space-y-1 text-[12px]">
           {[
-            { name: "GEMINI_API_KEY", label: "Gemini (default)" },
-            { name: "OPENAI_API_KEY", label: "OpenAI (fallback + TTS)" },
-            { name: "ANTHROPIC_API_KEY", label: "Anthropic (optional)" },
+            { name: "GEMINI_API_KEY", label: "Gemini (asosiy AI)" },
+            { name: "OPENAI_API_KEY", label: "OpenAI (fallback AI + TTS + Whisper STT)" },
             { name: "ADMIN_PASSWORD", label: "Admin paroli" },
           ].map((k) => (
             <li

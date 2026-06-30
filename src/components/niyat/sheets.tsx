@@ -820,8 +820,8 @@ export function PrivacySheet({ open, onClose }: { open: boolean; onClose: () => 
           Hech qaysi server ko'rmaydi.
         </Section>
         <Section title="AI suhbat">
-          Murabbiyga yozgan xabarlaringiz Anthropic Claude API'ga yuboriladi (faqat shu
-          turn'da). Tarix lokal saqlanadi.
+          Murabbiyga yozgan xabarlaringiz Google Gemini yoki OpenAI API'ga yuboriladi
+          (faqat shu turn'da). Tarix lokal saqlanadi.
         </Section>
         <Section title="Namoz vaqtlari">
           Aladhan.com bepul API ishlatiladi. Faqat joylashuv koordinatalari uzatiladi.
@@ -1255,7 +1255,7 @@ const YUKSALISH_SERVICES = [
   {
     icon: Brain,
     title: "AI yechimlar",
-    desc: "Claude, GPT integratsiyasi, custom AI agentlari",
+    desc: "Gemini, GPT integratsiyasi, custom AI agentlari",
   },
   {
     icon: Code2,
@@ -1500,9 +1500,10 @@ export function HelpSheet({ open, onClose }: { open: boolean; onClose: () => voi
     <BottomSheet open={open} onClose={onClose} title="Yordam">
       <div className="space-y-4 text-[13px]">
         <Section title="Ko'p so'raladigan savollar">
-          <Faq q="AI murabbiy real Claude AImi?">
-            Ha — agar serverga ANTHROPIC_API_KEY qo'shilgan bo'lsa. Aks holda demo
-            javoblar ishlatiladi (header'da "demo rejim" yoziladi).
+          <Faq q="AI murabbiy real AI mi?">
+            Ha — Google Gemini (asosiy) yoki OpenAI GPT (fallback) ishlatiladi.
+            Server'da kalit yo'q bo'lsa demo javoblar ko'rinadi (header'da
+            "demo rejim" yoziladi).
           </Faq>
           <Faq q="Ma'lumotim qaerda saqlanadi?">
             Hammasi shu brauzeringizning localStorage'ida. Boshqa qurilmaga sinx qilinmaydi.

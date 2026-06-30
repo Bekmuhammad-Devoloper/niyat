@@ -17,7 +17,7 @@ type SendResult = {
 
 // Demo rejimda — shaxsiyatga moslashgan mock javoblar.
 // Bu javoblar har shaxsiyat o'z ohangi bilan farqlanishini ko'rsatadi,
-// real Claude/GPT API o'rnatilmagan paytda ham.
+// real AI (Gemini/GPT) API o'rnatilmagan paytda ham.
 type MockSet = {
   greet: string;
   identity: string;
@@ -36,7 +36,7 @@ type MockSet = {
 const MOCK_BY_PERSONALITY: Record<AIPersonalityKey, MockSet> = {
   balanced: {
     greet: "Va alaykum assalom. Bugun nima haqida gaplashamiz?",
-    identity: "Men Niyatman — sening AI hayot murabbiying. Demo rejimda ishlayapman (API kalit yo'q). Real Claude yoki OpenAI ulansa, suhbatim tirikroq bo'ladi.",
+    identity: "Men Niyatman — sening AI hayot murabbiying. Hozir demo rejimda ishlayapman (server AI kalitiga ega emas). Server'ga Gemini yoki OpenAI kaliti qo'yilsa, suhbatim tirikroq bo'ladi.",
     quran: "Zo'r tanlov. Bugun Al-Mulk 8-oyatdan davom etamiz — 5 daqiqaga vaqt ajratamiz. Tayyormisan?",
     sport: "Ajoyib. 20 daqiqalik yengil yurish — havoda, telefon cho'ntakda. Yana bir niyat: bir do'stga \"yaxshimisan?\" deb yoz.",
     book: "10 bet — kichkina, ammo barakali. Qaysi kitobni o'qiyapsan hozir?",
@@ -46,7 +46,7 @@ const MOCK_BY_PERSONALITY: Record<AIPersonalityKey, MockSet> = {
     sabr: "Sabr — bu kuch. Qiyin payt — sinov payti. Eslab qol: bu ham o'tadi, lekin sening reaksiyang seniki bo'lib qoladi.",
     feeling: "Ayt, nima tuyayapsan? Charchaganmisan, asabiymisan, yoki shunchaki dam olishni xohlaysanmi? Birga ko'ramiz.",
     thanks: "Alhamdulilloh. Bir-birimizga yordamlashish — bu ham ibodat.",
-    default: "Tushundim. Demo rejimida javoblarim cheklangan. Real AI uchun .env ga ANTHROPIC_API_KEY yoki OPENAI_API_KEY qo'shing.",
+    default: "Tushundim. Demo rejimida javoblarim cheklangan. Server'da AI kaliti (GEMINI_API_KEY yoki OPENAI_API_KEY) sozlanishi kerak.",
   },
   strict_father: {
     greet: "Salom. Vaqt o'tib bormoqda. Ayt — bugun nimani amalga oshirding?",
