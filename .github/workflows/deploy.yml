@@ -126,23 +126,30 @@ jobs:
           } | ssh -o StrictHostKeyChecking=no "${USER_NAME}@${HOST}" '
             set -e
             cd /home/bekmuhammad_devoloper/niyat
-            [ -f .env ] && cp .env .env.bak
-            touch .env
+            # Workerd (wrangler dev) .dev.vars ni o'qiydi, .env emas.
+            # Shu sababli har ikkala faylga bir vaqtda yozamiz — kelajakda
+            # asosiy yo'l .dev.vars bo'lib qoladi.
+            for TARGET in .dev.vars .env; do
+              [ -f "$TARGET" ] && cp "$TARGET" "${TARGET}.bak"
+              touch "$TARGET"
+            done
             UPDATED=()
             while IFS= read -r LINE; do
               [ -z "$LINE" ] && continue
               KEY="${LINE%%=*}"
-              grep -v "^${KEY}=" .env > .env.tmp || true
-              mv .env.tmp .env
-              echo "$LINE" >> .env
+              for TARGET in .dev.vars .env; do
+                grep -v "^${KEY}=" "$TARGET" > "${TARGET}.tmp" || true
+                mv "${TARGET}.tmp" "$TARGET"
+                echo "$LINE" >> "$TARGET"
+              done
               UPDATED+=("$KEY")
             done
-            chmod 600 .env
-            echo "✓ .env yangilandi: ${UPDATED[*]:-hech narsa}"
-            echo "── Server-side .env summary ──"
-            echo "Path: $(pwd)/.env"
-            echo "Lines in .env: $(wc -l < .env)"
-            echo "Keys present: $(grep -E "^[A-Z_]+=" .env | sed "s/=.*//" | sort | tr "\n" " ")"
+            chmod 600 .dev.vars .env
+            echo "✓ .dev.vars va .env yangilandi: ${UPDATED[*]:-hech narsa}"
+            echo "── Server-side .dev.vars summary ──"
+            echo "Path: $(pwd)/.dev.vars"
+            echo "Lines in .dev.vars: $(wc -l < .dev.vars)"
+            echo "Keys present: $(grep -E "^[A-Z_]+=" .dev.vars | sed "s/=.*//" | sort | tr "\n" " ")"
           '
 
       - name: Run deploy on server
