@@ -24,7 +24,6 @@ import { autoCapitalize, capitalizeFirst } from "@/lib/text-utils";
 import { Flag } from "../Flag";
 import { SunnatSheet, ScreenTimeSheet } from "../sheets";
 import { AnnouncementBanner } from "../AnnouncementBanner";
-import { NiyatVoiceMode } from "../NiyatVoiceMode";
 
 function useCountUp(target: number, duration = 900) {
   const [v, setV] = useState(target);
@@ -87,7 +86,9 @@ function Checkbox({
   );
 }
 
-export function HomeScreen() {
+export function HomeScreen({
+  onOpenVoice,
+}: { onOpenVoice?: () => void } = {}) {
   // "Bugungi reja" endi Maqsadlar (useGoals)dan kelib chiqadi.
   // Kunlik scope + bugunga to'g'ri keladigan haftalik/oylik maqsadlar.
   const { goals, toggleToday, add: addGoal } = useGoals();
@@ -104,7 +105,9 @@ export function HomeScreen() {
   const [draftText, setDraftText] = useState("");
   const [sunnatOpen, setSunnatOpen] = useState(false);
   const [screenTimeOpen, setScreenTimeOpen] = useState(false);
-  const [voiceOpen, setVoiceOpen] = useState(false);
+  // voiceOpen state ataylab bu yerda yo'q — NiyatApp'da boshqariladi.
+  // Sabab: BackgroundMic'ni pauza qilish uchun voiceModeOpen ham shu yerda
+  // bo'lishi kerak (NiyatApp), aks holda FAB bossangiz mic conflict bo'ladi.
   const sunnat = useSunnat();
   const appTime = useAppTime();
   const { nextPrayer, hijriReadable, gregorianReadable } = usePrayerTimes();
@@ -458,12 +461,13 @@ export function HomeScreen() {
         </div>
       </div>
 
-      {/* Floating mic — yangi niyat qo'shadi (ovozli) */}
       {/* Niyat bilan gaplashish — ovozli muloqot rejimini ochish.
-          Bu MVP 2'ning asosiy entry-point'i. Big, primary, pulsing. */}
+          MVP 2'ning asosiy entry-point'i. NiyatApp uni ochadi va shu
+          paytda BackgroundMic'ni avtomatik pauza qiladi (mic conflict
+          oldini olish uchun). */}
       <button
         type="button"
-        onClick={() => setVoiceOpen(true)}
+        onClick={() => onOpenVoice?.()}
         className="absolute bottom-4 right-5 h-16 w-16 rounded-full bg-primary text-primary-foreground shadow-xl shadow-primary/40 flex items-center justify-center active:scale-95 transition z-30 pulse-gold"
         aria-label="Niyat bilan ovozli gaplashish"
       >
@@ -472,7 +476,6 @@ export function HomeScreen() {
 
       <SunnatSheet open={sunnatOpen} onClose={() => setSunnatOpen(false)} />
       <ScreenTimeSheet open={screenTimeOpen} onClose={() => setScreenTimeOpen(false)} />
-      <NiyatVoiceMode open={voiceOpen} onClose={() => setVoiceOpen(false)} />
     </div>
   );
 }

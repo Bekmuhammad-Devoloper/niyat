@@ -79,6 +79,7 @@ public class MicService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        instance = this;
         mainHandler = new Handler(Looper.getMainLooper());
         networkExecutor = Executors.newSingleThreadExecutor();
         acquireWakeLock();
@@ -530,6 +531,21 @@ public class MicService extends Service {
     @Override
     public void onDestroy() {
         Log.i(TAG, "onDestroy");
+        teardownRecognizer();
+        cancelWatchdog();
+        releaseWakeLock();
+        if (networkExecutor != null) {
+            networkExecutor.shutdown();
+            networkExecutor = null;
+        }
+        if (instance == this) instance = null;
+        super.onDestroy();
+    }
+
+    // Voice mode uchun mikrofonni darhol ozod qilish. Plugin.stop() shu
+    // metodni chaqiradi, keyin stopService. onDestroy asinxron — bu yo'l
+    // bilan AudioRecord lock voice mode getUserMedia'dan oldin ozod bo'ladi.
+    public void teardownRecognizer() {
         shouldRun = false;
         if (mainHandler != null) {
             mainHandler.removeCallbacksAndMessages(null);
@@ -540,12 +556,35 @@ public class MicService extends Service {
             try { recognizer.destroy(); } catch (Exception ignored) {}
             recognizer = null;
         }
-        releaseWakeLock();
-        if (networkExecutor != null) {
-            networkExecutor.shutdown();
-            networkExecutor = null;
+    }
+
+    // Watchdog AlarmManager intentini bekor qilish — aks holda 10 daqiqada
+    // service o'z-o'zidan qayta yoqilib voice mode'ni buzadi.
+    public void cancelWatchdog() {
+        try {
+            Intent watchdogIntent = new Intent(getApplicationContext(), MicService.class);
+            int flag = 0;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                flag = PendingIntent.FLAG_IMMUTABLE;
+            }
+            PendingIntent pi = PendingIntent.getService(
+                    getApplicationContext(), 7712, watchdogIntent, flag
+            );
+            AlarmManager am = (AlarmManager) getSystemService(ALARM_SERVICE);
+            if (am != null) am.cancel(pi);
+            pi.cancel();
+        } catch (Exception e) {
+            Log.w(TAG, "cancelWatchdog xato", e);
         }
-        super.onDestroy();
+    }
+
+    // BackgroundMicPlugin.stop() darhol chaqirilganda — instance ushlanib
+    // turilmaydi (Service singleton emas). Shu sabab static yo'l:
+    // Service o'zining instance'ini static field'da saqlaydi.
+    private static volatile MicService instance = null;
+
+    public static MicService getInstance() {
+        return instance;
     }
 
     @Nullable

@@ -59,11 +59,16 @@ export function useBackgroundMic(enabled: boolean) {
     if (!IS_NATIVE) return;
 
     if (!enabled) {
-      try {
-        void BackgroundMic.stop().catch(() => {});
-      } catch {
-        /* plugin yo'q yoki crash — jim o'tib ketamiz */
-      }
+      // Service'ni to'xtatishni await qilamiz — voice mode'da mikrofonni
+      // erkin qoldirish uchun. stop() resolve qilsa ham, SpeechRecognizer
+      // AudioRecord'ni async tarzda ozod qiladi (~100-300ms).
+      void (async () => {
+        try {
+          await BackgroundMic.stop();
+        } catch {
+          /* plugin yo'q yoki crash — jim o'tib ketamiz */
+        }
+      })();
       return;
     }
 

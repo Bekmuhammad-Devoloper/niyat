@@ -156,6 +156,55 @@ export function useWhisperStt(opts: {
   useEffect(() => {
     let cancelled = false;
 
+    // BackgroundMic.stop() chaqirilgan bo'lishi mumkin, lekin Android
+    // SpeechRecognizer AudioRecord'ni darhol ozod qilmaydi (IPC orqali
+    // ~100-300ms keyin). Shu sabab biroz kutamiz va xato bo'lsa qayta
+    // urinamiz. "Could not start audio source" / NotReadableError esa
+    // odatda shu race muammosi.
+    const openMicStream = async (): Promise<MediaStream> => {
+      const tryOpen = async (constraints: MediaStreamConstraints) => {
+        return navigator.mediaDevices.getUserMedia(constraints);
+      };
+      // 1) Biroz kuting — BackgroundMic to'xtatish IPC tugashi uchun
+      await new Promise<void>((r) => window.setTimeout(r, 350));
+      // 2) Birinchi urinish — to'liq constraints bilan
+      try {
+        return await tryOpen({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      } catch (err) {
+        const e = err as Error & { name?: string };
+        // 3) Mikrofon hali band — yana biroz kutib qayta urinamiz
+        if (
+          e?.name === "NotReadableError" ||
+          /could not start audio source/i.test(e?.message ?? "")
+        ) {
+          await new Promise<void>((r) => window.setTimeout(r, 600));
+          try {
+            return await tryOpen({
+              audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+              },
+            });
+          } catch {
+            // 4) Constraint'lar muammo bo'lishi mumkin — oddiy {audio:true} bilan
+            return await tryOpen({ audio: true });
+          }
+        }
+        // 5) Constraint xatolar — oddiy {audio:true} bilan urinib ko'ramiz
+        if (e?.name === "OverconstrainedError") {
+          return await tryOpen({ audio: true });
+        }
+        throw err;
+      }
+    };
+
     const start = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
         setState("error");
@@ -165,13 +214,7 @@ export function useWhisperStt(opts: {
       setState("requesting");
       setErrorMsg(null);
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          audio: {
-            echoCancellation: true,
-            noiseSuppression: true,
-            autoGainControl: true,
-          },
-        });
+        const stream = await openMicStream();
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop());
           return;

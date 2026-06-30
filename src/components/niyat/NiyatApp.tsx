@@ -32,7 +32,7 @@ import { useWakeWord } from "@/lib/hooks/use-wake-word";
 import { NiyatVoiceMode } from "./NiyatVoiceMode";
 import { AutoSyncModal } from "./AutoSyncModal";
 
-const SCREEN_REGISTRY: Record<TabKey, React.ComponentType> = {
+const SCREEN_REGISTRY: Record<TabKey, React.ComponentType<{ onOpenVoice?: () => void }>> = {
   home: HomeScreen,
   goals: GoalsScreen,
   coach: CoachScreen,
@@ -253,6 +253,12 @@ function MainApp({
     },
   });
 
+  // HomeScreen'ga onOpenVoice prop'ini uzatamiz — FAB bosilganda
+  // NiyatApp.voiceModeOpen flip qilinadi, BackgroundMic avtomatik pauza
+  // bo'ladi. Boshqa screenlarga prop kerak emas — ular voice mode'ni
+  // ochmaydi.
+  const openVoice = () => setVoiceModeOpen(true);
+
   return (
     <PhoneFrame>
       <StatusBar />
@@ -267,7 +273,7 @@ function MainApp({
               aria-hidden={!isActive}
               className={isActive ? "h-full fade-up" : "hidden"}
             >
-              <Screen />
+              <Screen onOpenVoice={openVoice} />
             </div>
           );
         })}

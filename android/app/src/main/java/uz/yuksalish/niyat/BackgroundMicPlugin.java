@@ -148,6 +148,15 @@ public class BackgroundMicPlugin extends Plugin {
     public void stop(PluginCall call) {
         Context ctx = getContext();
         prefs().edit().putBoolean(PREFS_ENABLED_KEY, false).apply();
+        // Avval mikrofonni darhol ozod qilamiz — voice mode uchun.
+        // stopService onDestroy'ni asinxron chaqiradi (100-500ms), unda
+        // SpeechRecognizer.destroy() ham IPC orqali ozod qiladi. Bu
+        // sinxron yo'l: getInstance().teardownRecognizer() darhol bajariladi.
+        MicService svc = MicService.getInstance();
+        if (svc != null) {
+            try { svc.teardownRecognizer(); } catch (Exception ignored) {}
+            try { svc.cancelWatchdog(); } catch (Exception ignored) {}
+        }
         Intent intent = new Intent(ctx, MicService.class);
         try {
             ctx.stopService(intent);

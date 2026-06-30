@@ -3,10 +3,10 @@ package uz.yuksalish.niyat;
 import android.content.Intent;
 import android.os.Bundle;
 import android.webkit.PermissionRequest;
-import android.webkit.WebChromeClient;
 import android.webkit.WebView;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebChromeClient;
 
 public class MainActivity extends BridgeActivity {
 
@@ -30,16 +30,25 @@ public class MainActivity extends BridgeActivity {
         // WebView ichidagi JS getUserMedia / Web Audio so'rovlariga ruxsat
         // berish — ilova RECORD_AUDIO ga ega bo'lsa ham, WebView alohida
         // so'raydi. Bu override'siz Whisper STT (voice mode) ishlamaydi.
+        //
+        // Muhim: BridgeWebChromeClient'ni subclass qilamiz, oddiy
+        // WebChromeClient bilan almashtirmaymiz. Aks holda Capacitor'ning
+        // file chooser, geolocation prompt, JS dialog, console log
+        // hooklari yo'qoladi.
         WebView webView = getBridge().getWebView();
         if (webView != null) {
-            webView.setWebChromeClient(new WebChromeClient() {
+            webView.setWebChromeClient(new BridgeWebChromeClient(getBridge()) {
                 @Override
                 public void onPermissionRequest(PermissionRequest request) {
                     if (request != null) {
                         try {
+                            // RECORD_AUDIO ilova darajasida grant qilingan
+                            // bo'lsa, WebView so'roviga ham javob beramiz.
                             request.grant(request.getResources());
+                            return;
                         } catch (Exception ignored) {}
                     }
+                    super.onPermissionRequest(request);
                 }
             });
         }
