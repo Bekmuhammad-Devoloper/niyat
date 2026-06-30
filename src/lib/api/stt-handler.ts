@@ -1,10 +1,16 @@
-// OpenAI Whisper bilan audio transkripsiya. Capacitor WebView Web Speech
-// API'ni ishonchli qo'llab-quvvatlamasligi sababli, ovozli muloqotda
+// OpenAI gpt-4o-transcribe bilan audio transkripsiya. Capacitor WebView Web
+// Speech API'ni ishonchli qo'llab-quvvatlamasligi sababli, ovozli muloqotda
 // MediaRecorder bilan yozib shu endpoint'ga jo'natamiz.
 //
-// Whisper-1 modeli o'zbek tilini yaxshi tushunadi (lekin transkripsiya
-// avtomatik lotin yozuvida emas, lokal alifboda chiqishi mumkin — biz
-// "uz" hint berib lotin so'rab olamiz).
+// Model tanlash tarixi:
+//   - whisper-1: O'zbek tili rasman yo'q. "uz" hint = 400 xatosi. "tr"
+//     (turk) mapping bilan ishlaydi-yu, lekin gapni Turkify qilib buzadi
+//     (-yapti -> -yor, oʻ -> ö, va h.k.). Voice mode'da AI "tushunmayapti"
+//     muammosini keltirib chiqarardi.
+//   - gpt-4o-transcribe: 2025-mart OpenAI yangiligi, GPT-4o multilingual
+//     backbone. O'zbek tilini Whisper-1'dan ancha yaxshi tushunadi va
+//     language="uz" hint'ini qabul qiladi (rasman ro'yxatda yo'q-yu,
+//     lekin API qabul qiladi).
 //
 // Request: multipart/form-data, "audio" maydoni
 // Response: { text: string }
@@ -13,18 +19,7 @@ import OpenAI, { toFile } from "openai";
 import { logAiCall, userIdFromRequest } from "./ai-log";
 import type { D1Database } from "../db/types";
 
-const STT_MODEL = "whisper-1";
-
-// Whisper-1 modeli rasman qo'llab-quvvatlaydigan tillar (ISO-639-1).
-// "uz" (o'zbek) ro'yxatda YO'Q — agar foydalanuvchi "uz" so'rasa, biz
-// language parametrini umuman bermaymiz va Whisper avtomatik aniqlashga
-// qoldiramiz. Prompt o'zbekcha kontekstga moslangan.
-const WHISPER_SUPPORTED_LANGS = new Set([
-  "af","ar","hy","az","be","bs","bg","ca","zh","hr","cs","da","nl","en","et",
-  "fi","fr","gl","de","el","he","hi","hu","is","id","it","ja","kn","kk","ko",
-  "lv","lt","mk","ms","mr","mi","ne","no","fa","pl","pt","ro","ru","sr","sk",
-  "sl","es","sw","sv","tl","ta","th","tr","uk","ur","vi","cy",
-]);
+const STT_MODEL = "gpt-4o-transcribe";
 
 export async function handleSttRequest(
   request: Request,
@@ -65,20 +60,14 @@ export async function handleSttRequest(
     });
   }
 
-  // Til hint — agar Whisper qabul qiluvchi til bo'lsa beramiz.
-  // O'zbek tili (uz) Whisper-1 da rasman yo'q, lekin o'zbek va turk
-  // turkiy oilaning yaqin a'zolari — Whisper'ning turk modeli o'zbekni
-  // anchagina yaxshi transkripsiya qiladi (avto-aniqlashdan ko'ra ancha
-  // yaxshi, chunki avto rus yoki ozar deb adashishi mumkin).
+  // Til hint — gpt-4o-transcribe "uz" (o'zbek) hint'ini qabul qiladi.
+  // Bo'sh string yoki noma'lum kod kelsa undefined qilamiz va avto-detect.
   const rawLang = ((formData.get("lang") as string | null) ?? "").toLowerCase();
-  let langHint: string | undefined;
-  if (rawLang === "uz" || rawLang === "uzb") {
-    langHint = "tr"; // O'zbekcha audio uchun turk hint — eng yaxshi natija
-  } else if (WHISPER_SUPPORTED_LANGS.has(rawLang)) {
-    langHint = rawLang;
-  } else {
-    langHint = undefined;
-  }
+  const langHint: string | undefined = rawLang
+    ? rawLang === "uzb"
+      ? "uz"
+      : rawLang
+    : undefined;
 
   // Whisper filename kengaytmasini content-type bilan moslashtirib yuboradi.
   // Native plugin "audio/mp4" m4a yuboradi; web MediaRecorder "audio/webm";
@@ -116,12 +105,19 @@ export async function handleSttRequest(
       file,
       language: langHint,
       response_format: "json",
-      // Promptni biroz islomiy kontekstga moslab beramiz — "niyat", "namoz",
-      // ismlar to'g'ri eshitilishi uchun.
+      // Prompt — o'zbek lotin yozuvi, islomiy va kundalik vocabulary,
+      // model tarjima qilmaslik va lotin imlosini saqlash uchun.
+      // gpt-4o-transcribe prompt'ni style guide sifatida ishlatadi.
       prompt:
-        "Bu Niyat AI hayot murabbiy ilovasi. Foydalanuvchi o'zbek tilida " +
-        "gapiradi. Mavzular: niyat, maqsad, namoz, Qur'on, oila. " +
-        "Ismlar: Bekmuhammad, Olloh, Muhammad sollallohu alayhi va sallam.",
+        "Niyat AI hayot murabbiy ilovasi. Foydalanuvchi o'zbek tilida " +
+        "lotin yozuvida gapiradi: niyat, maqsad, namoz, ro'za, sadaqa, " +
+        "Qur'on, sura, oyat, ibodat, oila, ota-ona, farzand, mehr, " +
+        "shukr, tavba, do'st, Instagram, telefon, alarm, qo'ng'iroq, " +
+        "soat, daqiqa, ertaga, kecha, bugun, ozgina, qo'shimcha, " +
+        "ko'paytirish, yengillik, bo'lyapti, qilyapman, o'qiyapman. " +
+        "Ismlar: Bekmuhammad, Olloh, Muhammad sollallohu alayhi va sallam, " +
+        "Abu Bakr, Umar, Usmon, Ali, Oysha, Fotima. " +
+        "Imlo: oʻ, gʻ, sh, ch, ng. Turkcha emas, o'zbekcha yoz.",
     });
 
     const text = result.text?.trim() ?? "";
@@ -148,7 +144,7 @@ export async function handleSttRequest(
       );
     }
     if (err instanceof OpenAI.APIError) {
-      console.error("Whisper STT error", err.status, err.message);
+      console.error(`[stt] ${STT_MODEL} error`, err.status, err.message);
       return new Response(
         JSON.stringify({
           error: `STT xatosi (${err.status}): ${err.message || "noma'lum"}`,
