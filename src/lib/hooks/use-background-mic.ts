@@ -60,36 +60,46 @@ export async function stopBackgroundMicAndWait(): Promise<void> {
 // ishlatadi — aks holda WebChromeClient ba'zan OS dialog'ni o'tkazib yuborib,
 // getUserMedia "Could not start audio source" yoki "not-allowed" beradi.
 export async function ensureMicPermission(): Promise<EnsureMicResult> {
-  // 1) Native — Capacitor permission system
+  // 1) Native — Capacitor permission system orqali OS dialog
   if (IS_NATIVE) {
     try {
       const check = await BackgroundMic.checkMicPermission();
-      if (check.microphone === "granted") {
-        return { state: "granted", granted: true };
+      if (check.microphone !== "granted") {
+        const req = await BackgroundMic.requestMicPermission();
+        if (req.microphone !== "granted") {
+          return { state: req.microphone, granted: false };
+        }
       }
-      const req = await BackgroundMic.requestMicPermission();
-      return { state: req.microphone, granted: req.microphone === "granted" };
     } catch (err) {
       console.warn("[ensure-mic] native plugin failed", err);
-      // Fallback: getUserMedia
     }
   }
-  // 2) Web yoki fallback — getUserMedia bilan dialog chiqarish
+  // 2) getUserMedia bilan dialog'ni real chiqarish (native flow ba'zan
+  // dialog'ni o'tkazib yuboradi — bu majburiy "hot path"). Stream darhol
+  // to'xtatiladi — biz faqat ruxsatni tasdiqlamoqdamiz.
   try {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
       return { state: "denied", granted: false };
     }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // Darhol to'xtatamiz — bu faqat permission trigger uchun edi
     stream.getTracks().forEach((t) => t.stop());
     return { state: "granted", granted: true };
   } catch (err) {
-    const e = err as Error & { name?: string };
+    const e = err as Error & { name?: string; message?: string };
     if (e?.name === "NotAllowedError") {
       return { state: "denied", granted: false };
     }
-    // NotReadableError yoki boshqa — ruxsat bor lekin mic band
-    console.warn("[ensure-mic] getUserMedia failed", err);
+    // NotReadableError = ruxsat bor lekin mikrofon band (boshqa app egallagan)
+    // Bu paytda ham "granted" qaytaramiz — chaqiruvchi keyin getUserMedia
+    // chaqirib aniq xato olishi mumkin.
+    if (
+      e?.name === "NotReadableError" ||
+      /could not start audio source/i.test(e?.message ?? "")
+    ) {
+      console.warn("[ensure-mic] mic busy:", e?.message);
+      return { state: "granted", granted: true };
+    }
+    console.warn("[ensure-mic] getUserMedia failed:", e?.name, e?.message);
     return { state: "denied", granted: false };
   }
 }

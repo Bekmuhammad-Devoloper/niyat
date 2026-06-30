@@ -612,15 +612,15 @@ export function VoiceSettingsSheet({ open, onClose }: { open: boolean; onClose: 
           />
         </Row>
         {v.wakeWordEnabled && (
-          <div className="rounded-xl bg-primary/5 border border-primary/20 p-3 -mt-2 space-y-2">
-            <p className="text-[11px] text-foreground leading-relaxed">
-              ✓ Wake word yoqilgan bo'lsa, orqa fon mikrofoni avtomatik
-              ishga tushadi.
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3 -mt-2 space-y-2">
+            <p className="text-[11px] text-amber-400/90 leading-relaxed">
+              ⚠️ Wake word yoqilganda orqa fon mikrofon doimiy ishlaydi.
+              Voice mode (mic tugma) ochilganda "Could not start audio
+              source" xatosi chiqishi mumkin. Voice mode ishlamasa,
+              wake word'ni o'chiring.
             </p>
             <p className="text-[10px] text-tertiary leading-relaxed">
-              Eslatma: ba'zi telefonlar (Xiaomi, Huawei) qattiq batareya
-              tejagich ishlatadi — Sozlamalar → Niyat → Batareya →
-              "Cheklanmagan" qiling.
+              Xiaomi/Huawei: Sozlamalar → Niyat → Batareya → "Cheklanmagan".
             </p>
             <button
               type="button"

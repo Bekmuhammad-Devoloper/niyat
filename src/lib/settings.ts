@@ -148,7 +148,12 @@ export const DEFAULT_SETTINGS: Settings = {
     preferredLang: "uz-UZ",
     micAlwaysOn: false, // default: o'chiq — foydalanuvchi Coach'da xohlasa yoqadi
     micBackground: false, // default: o'chiq — Sozlamalar → Ovoz orqali yoqiladi
-    wakeWordEnabled: true, // default: yoqilgan — "Niyat" deyish bilan ovozli muloqot
+    // default: o'chirilgan — BackgroundMic foreground service mikrofonni
+    // doimiy egallab oladi va voice mode ochilganda "Could not start audio
+    // source" xatosi keladi. Foydalanuvchi xohlasa sozlamalarda yoqadi —
+    // sozlamalar UI'da "voice mode bilan birga ishlamasligi mumkin"
+    // ogohlantirishi bor.
+    wakeWordEnabled: false,
   },
 };
 

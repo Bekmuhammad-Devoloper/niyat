@@ -220,11 +220,15 @@ public class BackgroundMicPlugin extends Plugin {
                     try { Thread.sleep(pollMs); } catch (InterruptedException ignored) {}
                     waited += pollMs;
                 }
-                // Qo'shimcha buffer — destroy IPC tugashi uchun
-                try { Thread.sleep(150); } catch (InterruptedException ignored) {}
+                // Qo'shimcha buffer — system RecognitionService AudioRecord'ni
+                // ozod qilishi uchun. SpeechRecognizer.destroy() async IPC, va
+                // tizim tomonida AudioRecord aktiv connection'ini yopish
+                // ~200-500ms ketadi. 500ms buffer hatto sekin Xiaomi/Huawei
+                // qurilmalarida ham yetarli.
+                try { Thread.sleep(500); } catch (InterruptedException ignored) {}
                 JSObject ret = new JSObject();
                 ret.put("released", MicService.getInstance() == null);
-                ret.put("waitedMs", waited + 150);
+                ret.put("waitedMs", waited + 500);
                 call.resolve(ret);
             }
         }, "BgMic-StopWait").start();
