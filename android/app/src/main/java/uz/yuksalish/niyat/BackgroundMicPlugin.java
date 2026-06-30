@@ -145,14 +145,15 @@ public class BackgroundMicPlugin extends Plugin {
     }
 
     @PluginMethod
-    public void stop(PluginCall call) {
-        Context ctx = getContext();
+    public void stop(final PluginCall call) {
+        final Context ctx = getContext();
         prefs().edit().putBoolean(PREFS_ENABLED_KEY, false).apply();
         // Avval mikrofonni darhol ozod qilamiz — voice mode uchun.
-        // stopService onDestroy'ni asinxron chaqiradi (100-500ms), unda
-        // SpeechRecognizer.destroy() ham IPC orqali ozod qiladi. Bu
-        // sinxron yo'l: getInstance().teardownRecognizer() darhol bajariladi.
-        MicService svc = MicService.getInstance();
+        // SpeechRecognizer.destroy() async IPC — AudioRecord ~100-300ms keyin
+        // ozod bo'ladi. Shu sabab MicService.instance == null bo'lguncha
+        // polling qilamiz (max 1000ms). Promise faqat shu keyin resolve bo'ladi —
+        // JS await stop() qaytib kelsa, mikrofon kafolatlangan ravishda bo'sh.
+        final MicService svc = MicService.getInstance();
         if (svc != null) {
             try { svc.teardownRecognizer(); } catch (Exception ignored) {}
             try { svc.cancelWatchdog(); } catch (Exception ignored) {}
@@ -160,10 +161,27 @@ public class BackgroundMicPlugin extends Plugin {
         Intent intent = new Intent(ctx, MicService.class);
         try {
             ctx.stopService(intent);
-            call.resolve();
-        } catch (Exception e) {
-            call.reject("stop xato: " + e.getMessage());
-        }
+        } catch (Exception ignored) {}
+
+        // Background thread'da poll qilamiz — main thread'ni bloklamasin
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                int maxWaitMs = 1000;
+                int pollMs = 25;
+                int waited = 0;
+                while (MicService.getInstance() != null && waited < maxWaitMs) {
+                    try { Thread.sleep(pollMs); } catch (InterruptedException ignored) {}
+                    waited += pollMs;
+                }
+                // Qo'shimcha buffer — destroy IPC tugashi uchun
+                try { Thread.sleep(150); } catch (InterruptedException ignored) {}
+                JSObject ret = new JSObject();
+                ret.put("released", MicService.getInstance() == null);
+                ret.put("waitedMs", waited + 150);
+                call.resolve(ret);
+            }
+        }, "BgMic-StopWait").start();
     }
 
     @PluginMethod

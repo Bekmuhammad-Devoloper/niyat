@@ -23,7 +23,7 @@ import { usePushSubscribe } from "@/lib/hooks/use-push-subscribe";
 import { seedFirstNiyat } from "@/lib/hooks/use-niyats";
 import { useGeolocation } from "@/lib/hooks/use-geolocation";
 import { useLocationSync } from "@/lib/hooks/use-location-sync";
-import { useBackgroundMic } from "@/lib/hooks/use-background-mic";
+import { useBackgroundMic, stopBackgroundMicAndWait } from "@/lib/hooks/use-background-mic";
 import { useGlobalMicListener } from "@/lib/hooks/use-global-mic-listener";
 import { useNeedsAutoSync } from "@/lib/hooks/use-backend-sync-check";
 import { useSettings } from "@/lib/hooks/use-settings";
@@ -229,9 +229,11 @@ function MainApp({
     (micSettings.voice.micBackground || micSettings.voice.wakeWordEnabled)
       && !voiceModeOpen,
   );
-  // Coach'dan tashqari ekranda global mic — micAlwaysOn bo'lsa
+  // Coach'dan tashqari ekranda global mic — micAlwaysOn bo'lsa.
+  // Voice mode ochiq paytda ham pauza qilish kerak — webkitSpeechRecognition
+  // RecognitionService'ni Whisper bilan birga ushlay olmaydi.
   useGlobalMicListener(
-    micSettings.voice.micAlwaysOn && tab !== "coach",
+    micSettings.voice.micAlwaysOn && tab !== "coach" && !voiceModeOpen,
   );
   // Eski user backend'siz qolgan bo'lsa avto-sync modal (hozir o'chirilgan)
   const needsAutoSync = useNeedsAutoSync({
@@ -253,11 +255,15 @@ function MainApp({
     },
   });
 
-  // HomeScreen'ga onOpenVoice prop'ini uzatamiz — FAB bosilganda
-  // NiyatApp.voiceModeOpen flip qilinadi, BackgroundMic avtomatik pauza
-  // bo'ladi. Boshqa screenlarga prop kerak emas — ular voice mode'ni
-  // ochmaydi.
-  const openVoice = () => setVoiceModeOpen(true);
+  // HomeScreen'ga onOpenVoice prop'ini uzatamiz. FAB bosilganda BackgroundMic
+  // service'ni AVVAL to'liq to'xtatamiz (await) keyin voiceModeOpen=true
+  // qilamiz. Aks holda useWhisperStt React child-effect tartibida getUserMedia
+  // ni BackgroundMic.stop() IPC dispatch bo'lishidan oldin chaqirib qoladi
+  // va "Could not start audio source" oladi.
+  const openVoice = async () => {
+    await stopBackgroundMicAndWait();
+    setVoiceModeOpen(true);
+  };
 
   return (
     <PhoneFrame>

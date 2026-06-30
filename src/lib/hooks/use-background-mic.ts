@@ -28,6 +28,19 @@ interface BackgroundMicPlugin {
 
 const BackgroundMic = registerPlugin<BackgroundMicPlugin>("BackgroundMic");
 
+// NiyatApp openVoice() shu metodni await qiladi — BackgroundMic'ni to'liq
+// to'xtatib voice mode'ni ochish uchun. Plugin endi MicService.instance ==
+// null bo'lguncha polling qilib qaytadi (1000ms + 150ms buffer max), shu
+// sabab JS await voice mode getUserMedia'dan oldin mikrofon bo'sh bo'ladi.
+export async function stopBackgroundMicAndWait(): Promise<void> {
+  if (!IS_NATIVE) return;
+  try {
+    await BackgroundMic.stop();
+  } catch (err) {
+    console.debug("[bg-mic] stopAndWait failed", err);
+  }
+}
+
 const IS_NATIVE = Capacitor.isNativePlatform();
 
 export type Transcript = { text: string; at: number };

@@ -1,9 +1,13 @@
 package uz.yuksalish.niyat;
 
+import android.Manifest;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Bundle;
 import android.webkit.PermissionRequest;
 import android.webkit.WebView;
+
+import androidx.core.content.ContextCompat;
 
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebChromeClient;
@@ -27,28 +31,46 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(PhoneControlPlugin.class);
         super.onCreate(savedInstanceState);
 
-        // WebView ichidagi JS getUserMedia / Web Audio so'rovlariga ruxsat
-        // berish — ilova RECORD_AUDIO ga ega bo'lsa ham, WebView alohida
-        // so'raydi. Bu override'siz Whisper STT (voice mode) ishlamaydi.
+        // WebView ichidagi JS getUserMedia / Web Audio so'rovlariga ruxsat.
+        // Muhim: OS darajasida RECORD_AUDIO grant qilingan bo'lsa GINA
+        // request.grant() qilamiz. Aks holda super.onPermissionRequest'ga
+        // delegate qilamiz — BridgeWebChromeClient o'zi RECORD_AUDIO ni
+        // OS dan so'raydi (dialog ko'rsatadi).
         //
-        // Muhim: BridgeWebChromeClient'ni subclass qilamiz, oddiy
-        // WebChromeClient bilan almashtirmaymiz. Aks holda Capacitor'ning
-        // file chooser, geolocation prompt, JS dialog, console log
-        // hooklari yo'qoladi.
+        // Avval men har doim grant qilardim — bu RECORD_AUDIO yo'q paytda
+        // ham WebView ruxsat olgan deb hisoblanardi, lekin AudioRecord OS
+        // darajasida bloklangan edi → "Could not start audio source".
         WebView webView = getBridge().getWebView();
         if (webView != null) {
             webView.setWebChromeClient(new BridgeWebChromeClient(getBridge()) {
                 @Override
                 public void onPermissionRequest(PermissionRequest request) {
-                    if (request != null) {
-                        try {
-                            // RECORD_AUDIO ilova darajasida grant qilingan
-                            // bo'lsa, WebView so'roviga ham javob beramiz.
-                            request.grant(request.getResources());
-                            return;
-                        } catch (Exception ignored) {}
+                    if (request == null) {
+                        super.onPermissionRequest(request);
+                        return;
                     }
-                    super.onPermissionRequest(request);
+                    boolean needsAudio = false;
+                    for (String r : request.getResources()) {
+                        if (PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(r)) {
+                            needsAudio = true;
+                            break;
+                        }
+                    }
+                    if (needsAudio) {
+                        int granted = ContextCompat.checkSelfPermission(
+                                MainActivity.this, Manifest.permission.RECORD_AUDIO);
+                        if (granted != PackageManager.PERMISSION_GRANTED) {
+                            // OS darajasida hali ruxsat yo'q — Capacitor'ning
+                            // o'zi OS dialog ko'rsatishi uchun delegate qilamiz
+                            super.onPermissionRequest(request);
+                            return;
+                        }
+                    }
+                    try {
+                        request.grant(request.getResources());
+                    } catch (Exception ignored) {
+                        super.onPermissionRequest(request);
+                    }
                 }
             });
         }

@@ -22,13 +22,12 @@ import { useUserProfile, isPremiumActive } from "@/lib/hooks/use-user-profile";
 import { useCoach } from "@/lib/hooks/use-coach";
 import { useCoachSessions, type ChatSession } from "@/lib/hooks/use-coach-sessions";
 import { useSettings } from "@/lib/hooks/use-settings";
-import { useSpeechRecognition } from "@/lib/hooks/use-speech";
+import { useWhisperStt } from "@/lib/hooks/use-whisper-stt";
 import { sendMicHeartbeat } from "@/lib/hooks/use-background-mic";
 import { useCoachTTS } from "@/lib/hooks/use-coach-tts";
 import { useNiyats } from "@/lib/hooks/use-niyats";
 import { autoCapitalize } from "@/lib/text-utils";
 import { NiyatLogo } from "../Logo";
-import { Flag } from "../Flag";
 import { BottomSheet } from "../BottomSheet";
 
 function GeoAvatar({ size = 36 }: { size?: number }) {
@@ -59,24 +58,33 @@ export function CoachScreen() {
   const tts = useCoachTTS();
   const [usingRealAI, setUsingRealAI] = useState<boolean | null>(null);
 
-  // Mikrofon doimiy yoniq — matn'ga jonli yozadi.
-  // AI'ga yuborish (token sarflanadi) — faqat foydalanuvchi Send tugmasini
-  // bosganda. Bu adashib gapirish/o'yga bog'liq narsalardan AI chaqirilmaslik
-  // uchun. MVP 2 da wake-word "Niyat" bo'lganda avtomatik chaqiruv qaytadi.
-  const stt = useSpeechRecognition({
-    lang: "uz-UZ",
-    alwaysOn: settings.voice.micAlwaysOn,
-    muted: tts.isPlaying || tts.isLoading || coach.isPending,
-    onResult: (text, isFinal) => {
-      // Jonli transkript (interim + final) — input maydoniga yoziladi.
-      // Foydalanuvchi koradi, tahrir qiladi, Send bosib AI'ga yuboradi.
-      setDraft(text);
-      // Final natija kelsa — server'ga heartbeat (admin "jonli" deb koradi)
-      if (isFinal && text.trim().length > 0) {
-        void sendMicHeartbeat(text);
-      }
+  // Mikrofon (Whisper STT). Web Speech API'dan voz kechdik — Android WebView'da
+  // ishonchli emas (crbug.com/487255), ko'p qurilmalarda not-allowed xato beradi.
+  // Whisper esa /api/stt orqali server tomonda transkripsiya qiladi, MediaRecorder
+  // hamma joyda ishlaydi. micActive true bo'lsa ovoz tinglanadi, jim qolsangiz
+  // yoziladi va matn input maydoniga qo'shiladi.
+  const [micActive, setMicActive] = useState(settings.voice.micAlwaysOn);
+  // Sozlama o'zgarsa — mosligi
+  useEffect(() => {
+    setMicActive(settings.voice.micAlwaysOn);
+  }, [settings.voice.micAlwaysOn]);
+
+  const stt = useWhisperStt({
+    active:
+      micActive && !tts.isPlaying && !tts.isLoading && !coach.isPending,
+    onTranscript: (text) => {
+      setDraft((prev) => {
+        const next = prev ? `${prev} ${text}` : text;
+        return autoCapitalize(next);
+      });
+      void sendMicHeartbeat(text);
+    },
+    onError: (msg) => {
+      console.warn("[coach-mic]", msg);
+      toast.error(msg);
     },
   });
+  const isListening = stt.state === "listening" || stt.state === "recording";
 
   const isCoachTyping = coach.isPending && !streamingText;
 
@@ -300,7 +308,7 @@ export function CoachScreen() {
             onChange={(e) => setDraft(autoCapitalize(e.target.value))}
             maxLength={500}
             autoCapitalize="sentences"
-            placeholder={stt.isListening ? "Tinglayapman..." : "Murabbiyga yozing..."}
+            placeholder={isListening ? "Tinglayapman..." : "Murabbiyga yozing..."}
             className="flex-1 bg-transparent outline-none text-[14px] text-foreground placeholder:text-tertiary"
           />
           <button
@@ -313,22 +321,21 @@ export function CoachScreen() {
           </button>
           <button
             type="button"
-            aria-label={stt.isListening ? "Mikrofonni to'xtatish" : "Ovozli xabar"}
+            aria-label={micActive ? "Mikrofonni to'xtatish" : "Ovozli xabar"}
             onClick={() => {
-              if (!stt.supported) {
+              if (typeof navigator === "undefined" || !navigator.mediaDevices) {
                 toast.info("Brauzeringiz ovozli kiritishni qo'llamaydi");
                 return;
               }
-              if (stt.isListening) stt.stop();
-              else stt.start();
+              setMicActive((v) => !v);
             }}
             className={`h-9 w-9 rounded-xl flex items-center justify-center active:scale-95 transition ${
-              stt.isListening
+              isListening
                 ? "bg-destructive/90 text-destructive-foreground pulse-gold"
                 : "bg-primary text-primary-foreground"
             }`}
           >
-            {stt.isListening ? <MicOff size={16} /> : <Mic size={16} />}
+            {micActive ? <MicOff size={16} /> : <Mic size={16} />}
           </button>
         </div>
         <p className="text-center text-[10px] mt-1.5">
@@ -336,13 +343,15 @@ export function CoachScreen() {
             <span className="text-destructive">{stt.error}</span>
           ) : tts.isPlaying ? (
             <span className="text-tertiary">Murabbiy javob beryapti...</span>
-          ) : stt.isListening ? (
+          ) : stt.state === "recording" ? (
             <span className="text-primary inline-flex items-center gap-1">
-              Tinglayapman — yuborish uchun{" "}
-              <Send size={10} className="inline" /> bosing
-              <Flag code={stt.activeLang.slice(0, 2)} size={14} />
+              Yozyapman — jim qoling, avtomatik yuboraman
             </span>
-          ) : settings.voice.micAlwaysOn ? (
+          ) : stt.state === "listening" ? (
+            <span className="text-primary">Eshityapman — gapiring</span>
+          ) : stt.state === "transcribing" ? (
+            <span className="text-tertiary">Matnga aylantiryapman...</span>
+          ) : micActive ? (
             <span className="text-tertiary">Mikrofon tayyorlanyapti...</span>
           ) : (
             <span className="text-tertiary">Ovozli xabar uchun mic bosing</span>
