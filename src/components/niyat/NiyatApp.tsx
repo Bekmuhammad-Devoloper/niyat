@@ -23,7 +23,8 @@ import { usePushSubscribe } from "@/lib/hooks/use-push-subscribe";
 import { seedFirstNiyat } from "@/lib/hooks/use-niyats";
 import { useGeolocation } from "@/lib/hooks/use-geolocation";
 import { useLocationSync } from "@/lib/hooks/use-location-sync";
-import { useBackgroundMic, stopBackgroundMicAndWait } from "@/lib/hooks/use-background-mic";
+import { useBackgroundMic } from "@/lib/hooks/use-background-mic";
+import { MicCoordinatorProvider, useMicCoordinator } from "./MicCoordinator";
 import { useGlobalMicListener } from "@/lib/hooks/use-global-mic-listener";
 import { useNeedsAutoSync } from "@/lib/hooks/use-backend-sync-check";
 import { useSettings } from "@/lib/hooks/use-settings";
@@ -180,7 +181,21 @@ export function NiyatApp() {
 // Bu yerda barcha ruxsat so'ravchi hooklar joylashgan, shu sababli
 // onboarding paytida hech qanday popup chiqmaydi.
 // =========================================================
-function MainApp({
+function MainApp(props: {
+  profile: ReturnType<typeof useUserProfile>["profile"];
+  setProfile: ReturnType<typeof useUserProfile>["setProfile"];
+}) {
+  // MicCoordinator butun ilovaga ulashtiriladi — Coach mic, voice mode va
+  // boshqa har qanday mic foydalanuvchisi BackgroundMic'ni avtomatik
+  // pauza qila olishi uchun.
+  return (
+    <MicCoordinatorProvider>
+      <MainAppInner {...props} />
+    </MicCoordinatorProvider>
+  );
+}
+
+function MainAppInner({
   profile,
   setProfile,
 }: {
@@ -220,20 +235,24 @@ function MainApp({
   usePushSubscribe();
   // Joylashuvni serverga jonatish
   useLocationSync();
-  // Voice mode ochiq paytda BackgroundMic'ni pauza qilish — aks holda
-  // service mikrofonni egallab oladi va Whisper getUserMedia "Could not
-  // start audio source" xatosi beradi. Voice mode yopilgach yana ishga
-  // tushadi.
+  // MicCoordinator — har qanday in-app mic foydalanuvchisi aktiv bo'lsa
+  // (voice mode, coach mic, ...) BackgroundMic foreground service pauza
+  // bo'ladi. Aks holda mic conflict → "Could not start audio source".
+  const { anyActive: anyMicConsumer, request: requestMic, release: releaseMic } =
+    useMicCoordinator();
   const [voiceModeOpen, setVoiceModeOpen] = useState(false);
   useBackgroundMic(
     (micSettings.voice.micBackground || micSettings.voice.wakeWordEnabled)
-      && !voiceModeOpen,
+      && !voiceModeOpen
+      && !anyMicConsumer,
   );
   // Coach'dan tashqari ekranda global mic — micAlwaysOn bo'lsa.
-  // Voice mode ochiq paytda ham pauza qilish kerak — webkitSpeechRecognition
-  // RecognitionService'ni Whisper bilan birga ushlay olmaydi.
+  // Voice mode ochiq paytda yoki Coordinator aktiv consumer bo'lsa pauza.
   useGlobalMicListener(
-    micSettings.voice.micAlwaysOn && tab !== "coach" && !voiceModeOpen,
+    micSettings.voice.micAlwaysOn
+      && tab !== "coach"
+      && !voiceModeOpen
+      && !anyMicConsumer,
   );
   // Eski user backend'siz qolgan bo'lsa avto-sync modal (hozir o'chirilgan)
   const needsAutoSync = useNeedsAutoSync({
@@ -255,14 +274,17 @@ function MainApp({
     },
   });
 
-  // HomeScreen'ga onOpenVoice prop'ini uzatamiz. FAB bosilganda BackgroundMic
-  // service'ni AVVAL to'liq to'xtatamiz (await) keyin voiceModeOpen=true
-  // qilamiz. Aks holda useWhisperStt React child-effect tartibida getUserMedia
-  // ni BackgroundMic.stop() IPC dispatch bo'lishidan oldin chaqirib qoladi
-  // va "Could not start audio source" oladi.
+  // FAB bosilganda voice mode'ni ochish. Coordinator orqali mikrofonni
+  // so'raymiz — BackgroundMic to'liq pauza qilingach voice mode ochiladi.
   const openVoice = async () => {
-    await stopBackgroundMicAndWait();
+    await requestMic("voice-mode");
     setVoiceModeOpen(true);
+  };
+  // Voice mode yopilganda mic'ni release qilamiz va BackgroundMic qayta
+  // ishga tushadi (agar settings'da yoqilgan bo'lsa).
+  const closeVoice = () => {
+    setVoiceModeOpen(false);
+    releaseMic("voice-mode");
   };
 
   return (
@@ -288,7 +310,7 @@ function MainApp({
       <TabBar active={tab} onChange={setTab} />
       <NiyatVoiceMode
         open={voiceModeOpen}
-        onClose={() => setVoiceModeOpen(false)}
+        onClose={closeVoice}
       />
       {needsAutoSync && (
         <AutoSyncModal

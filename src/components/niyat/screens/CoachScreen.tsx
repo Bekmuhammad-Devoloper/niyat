@@ -24,6 +24,7 @@ import { useCoachSessions, type ChatSession } from "@/lib/hooks/use-coach-sessio
 import { useSettings } from "@/lib/hooks/use-settings";
 import { useWhisperStt } from "@/lib/hooks/use-whisper-stt";
 import { sendMicHeartbeat } from "@/lib/hooks/use-background-mic";
+import { useMicCoordinator } from "../MicCoordinator";
 import { useCoachTTS } from "@/lib/hooks/use-coach-tts";
 import { useNiyats } from "@/lib/hooks/use-niyats";
 import { autoCapitalize } from "@/lib/text-utils";
@@ -63,15 +64,40 @@ export function CoachScreen() {
   // Whisper esa /api/stt orqali server tomonda transkripsiya qiladi, MediaRecorder
   // hamma joyda ishlaydi. micActive true bo'lsa ovoz tinglanadi, jim qolsangiz
   // yoziladi va matn input maydoniga qo'shiladi.
-  const [micActive, setMicActive] = useState(settings.voice.micAlwaysOn);
-  // Sozlama o'zgarsa — mosligi
+  const [micActive, setMicActive] = useState(false);
+  const [micReady, setMicReady] = useState(false);
+  const { request: requestMic, release: releaseMic } = useMicCoordinator();
+
+  // micActive flip qilinganda BackgroundMic'ni avval to'liq to'xtatib
+  // yoki qayta tiklab beramiz — aks holda "Could not start audio source".
   useEffect(() => {
-    setMicActive(settings.voice.micAlwaysOn);
+    if (!micActive) {
+      releaseMic("coach");
+      setMicReady(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      await requestMic("coach");
+      if (!cancelled) setMicReady(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [micActive, requestMic, releaseMic]);
+
+  // Sozlamadagi micAlwaysOn — boshlang'ich qiymat sifatida
+  useEffect(() => {
+    if (settings.voice.micAlwaysOn) setMicActive(true);
   }, [settings.voice.micAlwaysOn]);
 
   const stt = useWhisperStt({
     active:
-      micActive && !tts.isPlaying && !tts.isLoading && !coach.isPending,
+      micActive
+      && micReady
+      && !tts.isPlaying
+      && !tts.isLoading
+      && !coach.isPending,
     onTranscript: (text) => {
       setDraft((prev) => {
         const next = prev ? `${prev} ${text}` : text;
