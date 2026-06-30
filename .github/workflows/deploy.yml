@@ -79,18 +79,24 @@ jobs:
 
           echo "=== 4) Service restart ==="
           systemctl restart niyat
-          sleep 8
+          sleep 5
 
           echo "=== 5) Health check ==="
           STATUS=\$(systemctl is-active niyat)
           echo "Service: \$STATUS"
-          [ "\$STATUS" = "active" ] || { echo "❌ Service active emas"; exit 1; }
+          [ "\$STATUS" = "active" ] || { echo "Service active emas"; exit 1; }
 
-          HTTP=\$(curl -sI -o /dev/null -w "%{http_code}" https://my.niyat.tech)
-          echo "HTTP:    \$HTTP"
-          [ "\$HTTP" = "200" ] || [ "\$HTTP" = "304" ] || { echo "❌ HTTP \$HTTP"; exit 1; }
+          # Wrangler workerd cold start 10-20 sek olishi mumkin. Bir necha bor urinamiz.
+          HTTP=000
+          for i in 1 2 3 4 5 6 7 8; do
+            HTTP=\$(curl -sI -o /dev/null -w "%{http_code}" --max-time 8 https://my.niyat.tech || echo 000)
+            echo "Try \$i: HTTP \$HTTP"
+            [ "\$HTTP" = "200" ] || [ "\$HTTP" = "304" ] && break
+            sleep 4
+          done
+          [ "\$HTTP" = "200" ] || [ "\$HTTP" = "304" ] || { echo "HTTP \$HTTP after retries"; exit 1; }
 
-          echo "✅ Deploy muvaffaqiyatli — https://my.niyat.tech"
+          echo "Deploy OK — https://my.niyat.tech"
           DEPLOY_SCRIPT
           chmod +x /tmp/deploy.sh
           echo "✓ deploy.sh yozildi"
