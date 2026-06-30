@@ -157,6 +157,20 @@ jobs:
           } | ssh -o StrictHostKeyChecking=no "${USER_NAME}@${HOST}" '
             set -e
             cd /home/bekmuhammad_devoloper/niyat
+
+            # niyat.service qaysi user sifatida ishlayotganini topamiz —
+            # .dev.vars shu user uchun o'qish mumkin bo'lishi shart.
+            UNIT_USER=""
+            for UNIT_PATH in /etc/systemd/system/niyat.service /lib/systemd/system/niyat.service; do
+              if [ -f "$UNIT_PATH" ]; then
+                UNIT_USER=$(grep -E "^User=" "$UNIT_PATH" 2>/dev/null | tail -1 | sed "s/^User=//" | tr -d "[:space:]")
+                break
+              fi
+            done
+            # User= ko'rsatilmagan bo'lsa systemd default root sifatida ishga tushiradi
+            [ -z "$UNIT_USER" ] && UNIT_USER="root"
+            echo "niyat.service runs as: $UNIT_USER"
+
             # Wrangler dev reads .dev.vars not .env, so we write both.
             for TARGET in .dev.vars .env; do
               [ -f "$TARGET" ] && cp "$TARGET" "${TARGET}.bak"
@@ -173,10 +187,22 @@ jobs:
               done
               UPDATED+=("$KEY")
             done
-            chmod 600 .dev.vars .env
+
+            # 644 — fayl bekmuhammad_devoloper egaligida qoladi-yu, niyat.service
+            # qaysi user sifatida ishlasa ham uni o'qiy oladi. Server bitta
+            # foydalanuvchili VM, 644 ham yetarli darajada zich.
+            chmod 644 .dev.vars .env
+
+            # Egasini ham systemd user'iga moslashtiramiz (agar root bo'lsa sudo kerak).
+            if [ "$UNIT_USER" != "$(id -un)" ] && [ -n "$UNIT_USER" ]; then
+              sudo -n chown "$UNIT_USER:$UNIT_USER" .dev.vars .env 2>/dev/null || \
+                echo "(chown to $UNIT_USER skipped — sudo unavailable, 644 should be enough)"
+            fi
+
             echo "OK .dev.vars and .env updated: ${UPDATED[*]:-none}"
-            echo "── Server-side .dev.vars summary ──"
+            echo "Server-side .dev.vars summary"
             echo "Path: $(pwd)/.dev.vars"
+            echo "Mode: $(stat -c "%U:%G %a" .dev.vars)"
             echo "Lines in .dev.vars: $(wc -l < .dev.vars)"
             echo "Keys present: $(grep -E "^[A-Z_]+=" .dev.vars | sed "s/=.*//" | sort | tr "\n" " ")"
           '
