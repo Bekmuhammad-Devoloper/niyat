@@ -77,15 +77,35 @@ jobs:
           echo "=== 3) Build ==="
           npm run build 2>&1 | tail -5
 
-          echo "=== 4) Service restart ==="
-          systemctl restart niyat
+          echo "=== 4) .dev.vars sanity ==="
+          echo "Path:    /home/bekmuhammad_devoloper/niyat/.dev.vars"
+          echo "Exists:  \$(test -f .dev.vars && echo yes || echo no)"
+          echo "Lines:   \$(wc -l < .dev.vars 2>/dev/null || echo 0)"
+          echo "Owner:   \$(stat -c '%U:%G mode=%a' .dev.vars 2>/dev/null || echo unknown)"
+          echo "Keys:    \$(grep -E '^[A-Z_]+=' .dev.vars 2>/dev/null | sed 's/=.*//' | sort | tr '\n' ' ')"
+
+          echo "=== 5) Service restart ==="
+          sudo -n systemctl restart niyat || systemctl restart niyat || true
           sleep 5
 
-          echo "=== 5) Health check ==="
-          STATUS=\$(systemctl is-active niyat)
-          echo "Service: \$STATUS"
-          [ "\$STATUS" = "active" ] || { echo "Service active emas"; exit 1; }
+          echo "=== 6) Service status ==="
+          set +e
+          STATUS=\$(systemctl is-active niyat 2>&1)
+          RC=\$?
+          set -e
+          echo "Service: \$STATUS (rc=\$RC)"
 
+          if [ "\$STATUS" != "active" ]; then
+            echo ""
+            echo "=== Service did NOT come up. Diagnostic dump: ==="
+            echo "--- systemctl status ---"
+            sudo -n systemctl status niyat --no-pager 2>&1 | tail -30 || systemctl status niyat --no-pager 2>&1 | tail -30 || true
+            echo "--- journalctl last 80 ---"
+            sudo -n journalctl -u niyat -n 80 --no-pager 2>&1 || journalctl -u niyat -n 80 --no-pager 2>&1 || echo "(journal unreadable)"
+            exit 1
+          fi
+
+          echo "=== 7) HTTP health check ==="
           # Wrangler workerd cold start 10-20 sek olishi mumkin. Bir necha bor urinamiz.
           HTTP=000
           for i in 1 2 3 4 5 6 7 8; do
@@ -94,7 +114,12 @@ jobs:
             [ "\$HTTP" = "200" ] || [ "\$HTTP" = "304" ] && break
             sleep 4
           done
-          [ "\$HTTP" = "200" ] || [ "\$HTTP" = "304" ] || { echo "HTTP \$HTTP after retries"; exit 1; }
+          if [ "\$HTTP" != "200" ] && [ "\$HTTP" != "304" ]; then
+            echo ""
+            echo "=== HTTP failed after retries. Recent journal: ==="
+            sudo -n journalctl -u niyat -n 60 --no-pager 2>&1 || journalctl -u niyat -n 60 --no-pager 2>&1 || echo "(journal unreadable)"
+            exit 1
+          fi
 
           echo "Deploy OK — https://my.niyat.tech"
           DEPLOY_SCRIPT
