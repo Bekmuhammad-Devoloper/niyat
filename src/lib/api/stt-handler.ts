@@ -15,6 +15,17 @@ import type { D1Database } from "../db/types";
 
 const STT_MODEL = "whisper-1";
 
+// Whisper-1 modeli rasman qo'llab-quvvatlaydigan tillar (ISO-639-1).
+// "uz" (o'zbek) ro'yxatda YO'Q — agar foydalanuvchi "uz" so'rasa, biz
+// language parametrini umuman bermaymiz va Whisper avtomatik aniqlashga
+// qoldiramiz. Prompt o'zbekcha kontekstga moslangan.
+const WHISPER_SUPPORTED_LANGS = new Set([
+  "af","ar","hy","az","be","bs","bg","ca","zh","hr","cs","da","nl","en","et",
+  "fi","fr","gl","de","el","he","hi","hu","is","id","it","ja","kn","kk","ko",
+  "lv","lt","mk","ms","mr","mi","ne","no","fa","pl","pt","ro","ru","sr","sk",
+  "sl","es","sw","sv","tl","ta","th","tr","uk","ur","vi","cy",
+]);
+
 export async function handleSttRequest(
   request: Request,
   openaiKey: string | undefined,
@@ -54,8 +65,12 @@ export async function handleSttRequest(
     });
   }
 
-  // Til hint — "uz" (Whisper'ning ISO-639-1 kodi). Bo'lmasa avtomatik aniqlanadi.
-  const langHint = (formData.get("lang") as string | null) ?? "uz";
+  // Til hint — agar Whisper qabul qiluvchi til bo'lsa beramiz, aks holda
+  // (masalan "uz") undefined qilamiz va avto-aniqlash ishlaydi.
+  const rawLang = (formData.get("lang") as string | null) ?? "";
+  const langHint = WHISPER_SUPPORTED_LANGS.has(rawLang.toLowerCase())
+    ? rawLang.toLowerCase()
+    : undefined;
 
   // Whisper filename kengaytmasini content-type bilan moslashtirib yuboradi.
   // Native plugin "audio/mp4" m4a yuboradi; web MediaRecorder "audio/webm";
@@ -91,7 +106,7 @@ export async function handleSttRequest(
     const result = await openai.audio.transcriptions.create({
       model: STT_MODEL,
       file,
-      language: langHint || undefined,
+      language: langHint,
       response_format: "json",
       // Promptni biroz islomiy kontekstga moslab beramiz — "niyat", "namoz",
       // ismlar to'g'ri eshitilishi uchun.
