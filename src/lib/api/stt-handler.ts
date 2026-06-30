@@ -57,12 +57,36 @@ export async function handleSttRequest(
   // Til hint — "uz" (Whisper'ning ISO-639-1 kodi). Bo'lmasa avtomatik aniqlanadi.
   const langHint = (formData.get("lang") as string | null) ?? "uz";
 
+  // Whisper filename kengaytmasini content-type bilan moslashtirib yuboradi.
+  // Native plugin "audio/mp4" m4a yuboradi; web MediaRecorder "audio/webm";
+  // mos bo'lmagan filename'da Whisper 400 qaytaradi.
+  const mime = (audio.type || "audio/webm").toLowerCase();
+  const ext = mime.includes("mp4") || mime.includes("m4a")
+    ? "m4a"
+    : mime.includes("aac")
+      ? "aac"
+      : mime.includes("mpeg") || mime.includes("mp3")
+        ? "mp3"
+        : mime.includes("wav")
+          ? "wav"
+          : mime.includes("ogg")
+            ? "ogg"
+            : "webm";
+  const filename = `audio.${ext}`;
+
   try {
     const openai = new OpenAI({ apiKey: openaiKey });
     const buffer = await audio.arrayBuffer();
-    const file = await toFile(buffer, "audio.webm", {
-      type: audio.type || "audio/webm",
-    });
+    console.log(
+      `[stt] received ${buffer.byteLength} bytes mime=${mime} → filename=${filename}`,
+    );
+    if (buffer.byteLength < 200) {
+      return new Response(
+        JSON.stringify({ error: "Audio juda qisqa yoki bo'sh" }),
+        { status: 400, headers: { "content-type": "application/json" } },
+      );
+    }
+    const file = await toFile(buffer, filename, { type: mime });
 
     const result = await openai.audio.transcriptions.create({
       model: STT_MODEL,
@@ -102,15 +126,22 @@ export async function handleSttRequest(
     }
     if (err instanceof OpenAI.APIError) {
       console.error("Whisper STT error", err.status, err.message);
-      return new Response(JSON.stringify({ error: "STT xatosi" }), {
-        status: 502,
-        headers: { "content-type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          error: `STT xatosi (${err.status}): ${err.message || "noma'lum"}`,
+          status: err.status,
+          mime,
+          filename,
+        }),
+        { status: 502, headers: { "content-type": "application/json" } },
+      );
     }
     console.error("STT unexpected error", err);
     return new Response(
       JSON.stringify({
         error: err instanceof Error ? err.message : "STT xatosi",
+        mime,
+        filename,
       }),
       { status: 500, headers: { "content-type": "application/json" } },
     );
