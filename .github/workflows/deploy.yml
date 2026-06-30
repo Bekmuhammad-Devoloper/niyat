@@ -157,9 +157,13 @@ jobs:
           } | ssh -o StrictHostKeyChecking=no "${USER_NAME}@${HOST}" '
             set -e
             cd /home/bekmuhammad_devoloper/niyat
+            echo "[diag] pwd:           $(pwd)"
+            echo "[diag] whoami:        $(id -un):$(id -gn)"
+            echo "[diag] dir mode:      $(stat -c "%U:%G %a" .)"
+            echo "[diag] before — ls:"
+            ls -la .dev.vars .env 2>&1 | sed "s/^/    /" || true
 
-            # niyat.service qaysi user sifatida ishlayotganini topamiz —
-            # .dev.vars shu user uchun o'qish mumkin bo'lishi shart.
+            # niyat.service qaysi user sifatida ishlayotganini topamiz
             UNIT_USER=""
             for UNIT_PATH in /etc/systemd/system/niyat.service /lib/systemd/system/niyat.service; do
               if [ -f "$UNIT_PATH" ]; then
@@ -167,44 +171,69 @@ jobs:
                 break
               fi
             done
-            # User= ko'rsatilmagan bo'lsa systemd default root sifatida ishga tushiradi
             [ -z "$UNIT_USER" ] && UNIT_USER="root"
-            echo "niyat.service runs as: $UNIT_USER"
+            echo "[diag] niyat.service User= : $UNIT_USER"
 
-            # Wrangler dev reads .dev.vars not .env, so we write both.
+            # Mavjud bo'lsa zaxira nusxa ol, keyin faylni qaytadan yarat. Symlink
+            # yoki noto'g'ri eski versiyasini olib tashlash uchun: fayl egasi BIZ
+            # bo'lishimiz uchun yangidan yaratamiz.
             for TARGET in .dev.vars .env; do
-              [ -f "$TARGET" ] && cp "$TARGET" "${TARGET}.bak"
-              touch "$TARGET"
+              echo "[diag] prep $TARGET:"
+              if [ -e "$TARGET" ] || [ -L "$TARGET" ]; then
+                # Mavjud (oddiy fayl, symlink, yoki har qanday turdagi)
+                cp -f "$TARGET" "${TARGET}.bak" 2>/dev/null || true
+                rm -f "$TARGET" 2>/dev/null || true
+              fi
+              # Toza yangi bo'sh fayl yaratish
+              : > "$TARGET" || { echo "[FATAL] cannot create $TARGET in $(pwd)"; ls -la .; exit 1; }
+              # Avvalgi bakupdan eski kalitlarni qaytarib o'qiymiz (yangi qiymatlar bilan almashtiriladi)
+              if [ -f "${TARGET}.bak" ]; then
+                cat "${TARGET}.bak" >> "$TARGET" 2>/dev/null || true
+              fi
+              echo "[diag]   $(ls -la $TARGET 2>&1)"
             done
-            UPDATED=()
+
+            # Yangi qiymatlar bilan kalitlarni almashtirish
+            UPDATED=""
             while IFS= read -r LINE; do
               [ -z "$LINE" ] && continue
               KEY="${LINE%%=*}"
+              [ -z "$KEY" ] && continue
+              echo "[diag] updating key: $KEY"
               for TARGET in .dev.vars .env; do
-                grep -v "^${KEY}=" "$TARGET" > "${TARGET}.tmp" || true
-                mv "${TARGET}.tmp" "$TARGET"
-                echo "$LINE" >> "$TARGET"
+                # Eski KEY=... satrini olib tashlash
+                grep -v "^${KEY}=" "$TARGET" > "${TARGET}.tmp" 2>/dev/null || true
+                mv -f "${TARGET}.tmp" "$TARGET"
+                # Yangi qiymat qo'shish
+                printf "%s\n" "$LINE" >> "$TARGET"
+                echo "[diag]   wrote to $TARGET: $(wc -l < $TARGET) lines"
               done
-              UPDATED+=("$KEY")
+              UPDATED="$UPDATED $KEY"
             done
 
-            # 644 — fayl bekmuhammad_devoloper egaligida qoladi-yu, niyat.service
-            # qaysi user sifatida ishlasa ham uni o'qiy oladi. Server bitta
-            # foydalanuvchili VM, 644 ham yetarli darajada zich.
+            echo "[diag] after write — ls:"
+            ls -la .dev.vars .env 2>&1 | sed "s/^/    /"
+
+            # 644 — har qanday user uchun o'qishga ruxsat
             chmod 644 .dev.vars .env
 
-            # Egasini ham systemd user'iga moslashtiramiz (agar root bo'lsa sudo kerak).
+            # Egasini systemd user'iga moslashtiramiz, agar farq qilsa
             if [ "$UNIT_USER" != "$(id -un)" ] && [ -n "$UNIT_USER" ]; then
-              sudo -n chown "$UNIT_USER:$UNIT_USER" .dev.vars .env 2>/dev/null || \
-                echo "(chown to $UNIT_USER skipped — sudo unavailable, 644 should be enough)"
+              sudo -n chown "$UNIT_USER:$UNIT_USER" .dev.vars .env 2>/dev/null && \
+                echo "[diag] chown to $UNIT_USER OK" || \
+                echo "[diag] chown to $UNIT_USER skipped (sudo unavailable, 644 ham yetarli)"
             fi
 
-            echo "OK .dev.vars and .env updated: ${UPDATED[*]:-none}"
-            echo "Server-side .dev.vars summary"
-            echo "Path: $(pwd)/.dev.vars"
-            echo "Mode: $(stat -c "%U:%G %a" .dev.vars)"
-            echo "Lines in .dev.vars: $(wc -l < .dev.vars)"
-            echo "Keys present: $(grep -E "^[A-Z_]+=" .dev.vars | sed "s/=.*//" | sort | tr "\n" " ")"
+            # Eski bakuplarni tozalash
+            rm -f .dev.vars.bak .env.bak 2>/dev/null || true
+
+            echo "OK updated keys:${UPDATED:-(none)}"
+            echo "[diag] final .dev.vars:"
+            echo "    $(stat -c "%U:%G %a %s bytes" .dev.vars)"
+            echo "    keys: $(grep -E "^[A-Z_]+=" .dev.vars | sed "s/=.*//" | sort | tr "\n" " ")"
+            echo "[diag] final .env:"
+            echo "    $(stat -c "%U:%G %a %s bytes" .env)"
+            echo "    keys: $(grep -E "^[A-Z_]+=" .env | sed "s/=.*//" | sort | tr "\n" " ")"
           '
 
       - name: Run deploy on server
