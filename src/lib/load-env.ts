@@ -12,8 +12,8 @@ import { fileURLToPath } from "node:url";
 
 let loaded = false;
 
-export function loadDotEnvIfPresent(): void {
-  if (loaded) return;
+export function loadDotEnvIfPresent(force = false): void {
+  if (loaded && !force) return;
   loaded = true;
   if (typeof process === "undefined" || !process?.env) return;
 

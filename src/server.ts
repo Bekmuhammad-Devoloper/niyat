@@ -150,35 +150,116 @@ export default {
       }
 
       // Diagnostic — brauzerdan ochib qaysi kalitlar server'da borligini ko'rish.
-      // Qiymatlarni KO'RSATMAYDI, faqat true/false. /api/_diag yoki /api/health
+      // Qiymatlarni KO'RSATMAYDI, faqat true/false va metadata.
       if (url.pathname === "/api/_diag" || url.pathname === "/api/health") {
+        // Disk'dagi haqiqiy .env fayllarini tekshiramiz. existsSync + key list.
+        const envFiles: Array<{
+          path: string;
+          exists: boolean;
+          size?: number;
+          keys?: string[];
+          error?: string;
+        }> = [];
+        try {
+          const { existsSync, readFileSync, statSync } = await import("node:fs");
+          const candidates = [
+            "/home/bekmuhammad_devoloper/niyat/.env",
+            "/root/.env",
+            "/etc/niyat/.env",
+            "/.env",
+            typeof process !== "undefined"
+              ? `${process.cwd?.() ?? "/"}/.env`
+              : "/.env",
+          ];
+          const seen = new Set<string>();
+          for (const path of candidates) {
+            if (seen.has(path)) continue;
+            seen.add(path);
+            try {
+              if (!existsSync(path)) {
+                envFiles.push({ path, exists: false });
+                continue;
+              }
+              const stat = statSync(path);
+              const content = readFileSync(path, "utf8");
+              const keys: string[] = [];
+              for (const rawLine of content.split(/\r?\n/)) {
+                const line = rawLine.trim();
+                if (!line || line.startsWith("#")) continue;
+                const eq = line.indexOf("=");
+                if (eq > 0) keys.push(line.slice(0, eq).trim());
+              }
+              envFiles.push({
+                path,
+                exists: true,
+                size: stat.size,
+                keys,
+              });
+            } catch (err) {
+              envFiles.push({
+                path,
+                exists: true,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+          }
+        } catch (err) {
+          envFiles.push({
+            path: "fs-import-failed",
+            exists: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+
+        // Talabga binoan .env qayta yuklash — startup'da o'tib ketgan bo'lsa
+        let reloadAttempted = false;
+        if (url.searchParams.get("reload") === "1") {
+          try {
+            const { loadDotEnvIfPresent: reload } = await import("./lib/load-env");
+            reload(true); // force=true — startup'da yuklangan bo'lsa ham qayta o'qiymiz
+            reloadAttempted = true;
+          } catch (err) {
+            console.warn("[diag] reload failed", err);
+          }
+        }
+
         const secrets = getSecrets(env);
         const proc =
           typeof process !== "undefined" && process?.env ? process.env : {};
         return addCorsHeaders(
           new Response(
-            JSON.stringify({
-              ok: true,
-              now: new Date().toISOString(),
-              cwd: typeof process !== "undefined" ? process.cwd?.() : "n/a",
-              secrets: {
-                OPENAI_API_KEY: !!secrets?.OPENAI_API_KEY,
-                GEMINI_API_KEY: !!secrets?.GEMINI_API_KEY,
-                ANTHROPIC_API_KEY: !!secrets?.ANTHROPIC_API_KEY,
-                ADMIN_PASSWORD: !!secrets?.ADMIN_PASSWORD,
+            JSON.stringify(
+              {
+                ok: true,
+                now: new Date().toISOString(),
+                cwd: typeof process !== "undefined" ? process.cwd?.() : "n/a",
+                hasProcess: typeof process !== "undefined",
+                hasProcessEnv:
+                  typeof process !== "undefined" && !!process?.env,
+                processEnvKeyCount: Object.keys(proc).length,
+                reloadAttempted,
+                envFiles,
+                secrets: {
+                  OPENAI_API_KEY: !!secrets?.OPENAI_API_KEY,
+                  GEMINI_API_KEY: !!secrets?.GEMINI_API_KEY,
+                  ANTHROPIC_API_KEY: !!secrets?.ANTHROPIC_API_KEY,
+                  ADMIN_PASSWORD: !!secrets?.ADMIN_PASSWORD,
+                },
+                processEnvDirect: {
+                  OPENAI_API_KEY: !!proc.OPENAI_API_KEY,
+                  GEMINI_API_KEY: !!proc.GEMINI_API_KEY,
+                  ANTHROPIC_API_KEY: !!proc.ANTHROPIC_API_KEY,
+                },
+                envParam: {
+                  hasOpenai: !!(env as { OPENAI_API_KEY?: string } | undefined)
+                    ?.OPENAI_API_KEY,
+                  hasGemini: !!(env as { GEMINI_API_KEY?: string } | undefined)
+                    ?.GEMINI_API_KEY,
+                },
               },
-              processEnvDirect: {
-                OPENAI_API_KEY: !!proc.OPENAI_API_KEY,
-                GEMINI_API_KEY: !!proc.GEMINI_API_KEY,
-                ANTHROPIC_API_KEY: !!proc.ANTHROPIC_API_KEY,
-              },
-              envParam: {
-                hasOpenai: !!(env as { OPENAI_API_KEY?: string } | undefined)
-                  ?.OPENAI_API_KEY,
-                hasGemini: !!(env as { GEMINI_API_KEY?: string } | undefined)
-                  ?.GEMINI_API_KEY,
-              },
-            }, null, 2),
+              null,
+              2,
+            ),
             {
               status: 200,
               headers: { "content-type": "application/json" },
