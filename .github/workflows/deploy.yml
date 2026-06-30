@@ -157,83 +157,88 @@ jobs:
           } | ssh -o StrictHostKeyChecking=no "${USER_NAME}@${HOST}" '
             set -e
             cd /home/bekmuhammad_devoloper/niyat
-            echo "[diag] pwd:           $(pwd)"
-            echo "[diag] whoami:        $(id -un):$(id -gn)"
-            echo "[diag] dir mode:      $(stat -c "%U:%G %a" .)"
-            echo "[diag] before — ls:"
+            echo "[diag] pwd: $(pwd)"
+            echo "[diag] whoami: $(id -un):$(id -gn)"
+            echo "[diag] dir owner: $(stat -c "%U:%G %a" .)"
+            echo "[diag] before existing files:"
             ls -la .dev.vars .env 2>&1 | sed "s/^/    /" || true
 
-            # niyat.service qaysi user sifatida ishlayotganini topamiz
-            UNIT_USER=""
-            for UNIT_PATH in /etc/systemd/system/niyat.service /lib/systemd/system/niyat.service; do
-              if [ -f "$UNIT_PATH" ]; then
-                UNIT_USER=$(grep -E "^User=" "$UNIT_PATH" 2>/dev/null | tail -1 | sed "s/^User=//" | tr -d "[:space:]")
+            # systemd unit User= qiymatini topamiz
+            UNIT_USER=root
+            for UNIT in /etc/systemd/system/niyat.service /lib/systemd/system/niyat.service; do
+              if [ -f "$UNIT" ]; then
+                U=$(grep -E "^User=" "$UNIT" 2>/dev/null | tail -1 | sed "s/^User=//" | tr -d "[:space:]")
+                [ -n "$U" ] && UNIT_USER="$U"
                 break
               fi
             done
-            [ -z "$UNIT_USER" ] && UNIT_USER="root"
-            echo "[diag] niyat.service User= : $UNIT_USER"
+            echo "[diag] systemd User= $UNIT_USER"
 
-            # Mavjud bo'lsa zaxira nusxa ol, keyin faylni qaytadan yarat. Symlink
-            # yoki noto'g'ri eski versiyasini olib tashlash uchun: fayl egasi BIZ
-            # bo'lishimiz uchun yangidan yaratamiz.
-            for TARGET in .dev.vars .env; do
-              echo "[diag] prep $TARGET:"
-              if [ -e "$TARGET" ] || [ -L "$TARGET" ]; then
-                # Mavjud (oddiy fayl, symlink, yoki har qanday turdagi)
-                cp -f "$TARGET" "${TARGET}.bak" 2>/dev/null || true
-                rm -f "$TARGET" 2>/dev/null || true
+            # Mavjud .dev.vars mazmunini ishchi buferga o-qiymiz (eski GEMINI va
+            # boshqa kalitlarni yo-qotmaslik uchun). Boshqa egasiniki bo-lsa sudo
+            # bilan o-qishga urinamiz.
+            WORK=$(mktemp)
+            if [ -f .dev.vars ]; then
+              if cat .dev.vars > "$WORK" 2>/dev/null; then
+                echo "[diag] read existing .dev.vars: $(wc -l < $WORK) lines"
+              else
+                sudo -n cat .dev.vars > "$WORK" 2>/dev/null || : > "$WORK"
+                echo "[diag] read existing (with sudo or empty): $(wc -l < $WORK) lines"
               fi
-              # Toza yangi bo'sh fayl yaratish
-              : > "$TARGET" || { echo "[FATAL] cannot create $TARGET in $(pwd)"; ls -la .; exit 1; }
-              # Avvalgi bakupdan eski kalitlarni qaytarib o'qiymiz (yangi qiymatlar bilan almashtiriladi)
-              if [ -f "${TARGET}.bak" ]; then
-                cat "${TARGET}.bak" >> "$TARGET" 2>/dev/null || true
-              fi
-              echo "[diag]   $(ls -la $TARGET 2>&1)"
-            done
+            else
+              echo "[diag] no existing .dev.vars; starting empty"
+            fi
 
-            # Yangi qiymatlar bilan kalitlarni almashtirish
+            # GitHub Secret stdin dan kelgan yangi kalitlarni qo-shamiz/almashtiramiz
             UPDATED=""
             while IFS= read -r LINE; do
               [ -z "$LINE" ] && continue
               KEY="${LINE%%=*}"
               [ -z "$KEY" ] && continue
-              echo "[diag] updating key: $KEY"
-              for TARGET in .dev.vars .env; do
-                # Eski KEY=... satrini olib tashlash
-                grep -v "^${KEY}=" "$TARGET" > "${TARGET}.tmp" 2>/dev/null || true
-                mv -f "${TARGET}.tmp" "$TARGET"
-                # Yangi qiymat qo'shish
-                printf "%s\n" "$LINE" >> "$TARGET"
-                echo "[diag]   wrote to $TARGET: $(wc -l < $TARGET) lines"
-              done
+              # Eski qatorni olib tashlash
+              grep -v "^${KEY}=" "$WORK" > "${WORK}.new" 2>/dev/null || : > "${WORK}.new"
+              mv -f "${WORK}.new" "$WORK"
+              # Yangi qiymatni qo-shish
+              printf "%s\n" "$LINE" >> "$WORK"
               UPDATED="$UPDATED $KEY"
             done
+            echo "[diag] updated keys via secrets:${UPDATED:-(none)}"
+            echo "[diag] merged buffer keys: $(grep -E "^[A-Z_]+=" "$WORK" | sed "s/=.*//" | sort | tr "\n" " ")"
 
-            echo "[diag] after write — ls:"
-            ls -la .dev.vars .env 2>&1 | sed "s/^/    /"
+            # Atomar yozish — .dev.vars va .env ga buferdan ko-chirish.
+            # Eski faylni boshqa user ega bo-lsa cp ustiga yozolmaymiz; oldin rm.
+            for TARGET in .dev.vars .env; do
+              if [ -e "$TARGET" ] && [ ! -w "$TARGET" ]; then
+                sudo -n rm -f "$TARGET" 2>/dev/null || rm -f "$TARGET" 2>/dev/null || true
+              fi
+              cp "$WORK" "$TARGET"
+            done
+            rm -f "$WORK"
 
-            # 644 — har qanday user uchun o'qishga ruxsat
-            chmod 644 .dev.vars .env
-
-            # Egasini systemd user'iga moslashtiramiz, agar farq qilsa
-            if [ "$UNIT_USER" != "$(id -un)" ] && [ -n "$UNIT_USER" ]; then
-              sudo -n chown "$UNIT_USER:$UNIT_USER" .dev.vars .env 2>/dev/null && \
-                echo "[diag] chown to $UNIT_USER OK" || \
-                echo "[diag] chown to $UNIT_USER skipped (sudo unavailable, 644 ham yetarli)"
+            # Ruxsat: niyat.service User=UNIT_USER fayl yozish bilan ham kerak
+            # boladi (wrangler dev hot reload uchun lock oladi). Egasini UNIT_USER
+            # qilishga urinamiz, bo-lmasa group orqali, bo-lmasa 666 oxirgi chora.
+            CHOWN_OK=no
+            if [ "$UNIT_USER" = "$(id -un)" ]; then
+              CHOWN_OK=same-user
+            else
+              if sudo -n chown "$UNIT_USER:$UNIT_USER" .dev.vars .env 2>/dev/null; then
+                CHOWN_OK=chown
+              elif chgrp "$UNIT_USER" .dev.vars .env 2>/dev/null; then
+                CHOWN_OK=chgrp
+              fi
             fi
+            echo "[diag] ownership strategy: $CHOWN_OK"
 
-            # Eski bakuplarni tozalash
-            rm -f .dev.vars.bak .env.bak 2>/dev/null || true
+            case "$CHOWN_OK" in
+              same-user|chown) chmod 644 .dev.vars .env ;;
+              chgrp)           chmod 664 .dev.vars .env ;;
+              *)               chmod 666 .dev.vars .env ;;
+            esac
 
-            echo "OK updated keys:${UPDATED:-(none)}"
-            echo "[diag] final .dev.vars:"
-            echo "    $(stat -c "%U:%G %a %s bytes" .dev.vars)"
-            echo "    keys: $(grep -E "^[A-Z_]+=" .dev.vars | sed "s/=.*//" | sort | tr "\n" " ")"
-            echo "[diag] final .env:"
-            echo "    $(stat -c "%U:%G %a %s bytes" .env)"
-            echo "    keys: $(grep -E "^[A-Z_]+=" .env | sed "s/=.*//" | sort | tr "\n" " ")"
+            echo "[diag] final .dev.vars: $(stat -c "%U:%G %a %s_bytes" .dev.vars) keys=$(grep -E "^[A-Z_]+=" .dev.vars | sed "s/=.*//" | sort | tr "\n" " ")"
+            echo "[diag] final .env:      $(stat -c "%U:%G %a %s_bytes" .env)      keys=$(grep -E "^[A-Z_]+=" .env | sed "s/=.*//" | sort | tr "\n" " ")"
+            echo "OK env update complete"
           '
 
       - name: Run deploy on server
