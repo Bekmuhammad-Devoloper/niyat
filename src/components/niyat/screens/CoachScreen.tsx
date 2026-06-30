@@ -123,7 +123,7 @@ export function CoachScreen() {
       if (usingRealAI === null) {
         setUsingRealAI(result.usingRealAI);
         if (!result.usingRealAI) {
-          toast.info("Demo rejim: ANTHROPIC_API_KEY o'rnatilmagan.", { duration: 5000 });
+          toast.info("Demo rejim: AI API kaliti sozlanmagan.", { duration: 5000 });
         }
       }
       // TTS yoqilgan bo'lsa, javobni eshittiramiz (faqat Premium)
@@ -168,7 +168,7 @@ export function CoachScreen() {
           <p className="text-[15px] font-semibold text-foreground leading-tight inline-flex items-center gap-1.5">
             Murabbiy
             {usingRealAI === true && (
-              <Sparkles size={11} className="text-primary" aria-label="Real Claude AI" />
+              <Sparkles size={11} className="text-primary" aria-label="Real AI" />
             )}
           </p>
           <p className="text-[11px] text-tertiary leading-tight mt-0.5">

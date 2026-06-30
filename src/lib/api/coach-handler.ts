@@ -97,15 +97,16 @@ export async function handleCoachRequest(
   const messages = prepared;
   const systemText = buildSystemPrompt(body.personality);
 
-  // Provider zanjiri: Gemini > Anthropic > OpenAI. Birinchisi xato bersa
-  // (rate limit, server overloaded, quota tugagan) — keyingisiga avtomatik
-  // o'tadi. Hech bittasi ishlamasa — oxirgi xatoni qaytaramiz.
+  // Provider zanjiri: Gemini > OpenAI. Birinchisi xato bersa (rate limit,
+  // server overloaded, quota tugagan) — keyingisiga avtomatik o'tadi. Hech
+  // bittasi ishlamasa — oxirgi xatoni qaytaramiz.
+  // Anthropic Claude'dan voz kechdik (foydalanuvchi qarori, 2026-06).
   const chain = buildProviderChain(keys);
   if (chain.length === 0) {
     return jsonResponse(
       {
         error: "AI API kaliti sozlanmagan",
-        hint: "Dev: .env yarating va GEMINI_API_KEY=... yoki ANTHROPIC_API_KEY=sk-ant-... yoki OPENAI_API_KEY=sk-... qo'shing.",
+        hint: "Dev: .env yarating va GEMINI_API_KEY=... yoki OPENAI_API_KEY=sk-... qo'shing.",
       },
       { status: 503 },
     );
@@ -127,8 +128,9 @@ type ProviderEntry = { id: ProviderId; key: string };
 function buildProviderChain(keys: CoachKeys): ProviderEntry[] {
   const chain: ProviderEntry[] = [];
   if (keys.gemini) chain.push({ id: "gemini", key: keys.gemini });
-  if (keys.anthropic) chain.push({ id: "anthropic", key: keys.anthropic });
   if (keys.openai) chain.push({ id: "openai", key: keys.openai });
+  // Anthropic provider'i kodda saqlangan (CoachKeys.anthropic, anthropic
+  // handler'lar) — kelajakda tiklanish uchun. Lekin zanjirga kiritmaymiz.
   return chain;
 }
 
