@@ -107,8 +107,19 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          # Avval CI loglarida har sekret bormi ko'rsatamiz (qiymat emas, faqat
+          # uzunlik). Bo'sh bo'lsa sezamiz nimaga server tomon ham bo'sh.
+          echo "── Secret diagnostic (CI side) ──"
+          echo "OPENAI_API_KEY length: ${#OPENAI_API_KEY}"
+          echo "ANTHROPIC_API_KEY length: ${#ANTHROPIC_API_KEY}"
+          echo ""
+
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "⚠️  OPENAI_API_KEY GitHub Secret BO'SH — .env'ga yozilmaydi!"
+            echo "    GitHub → Settings → Secrets → Actions → OPENAI_API_KEY ni tekshiring"
+          fi
+
           # Har bir sekret uchun "NAME=VALUE" satrini qator-qator stdin ga yozamiz.
-          # Server tarafdan grep bilan eski qatorlarni olib tashlab, yangilarini qo'shamiz.
           {
             [ -n "$OPENAI_API_KEY" ] && printf 'OPENAI_API_KEY=%s\n' "$OPENAI_API_KEY"
             [ -n "$ANTHROPIC_API_KEY" ] && printf 'ANTHROPIC_API_KEY=%s\n' "$ANTHROPIC_API_KEY"
@@ -128,6 +139,10 @@ jobs:
             done
             chmod 600 .env
             echo "✓ .env yangilandi: ${UPDATED[*]:-hech narsa}"
+            echo "── Server-side .env summary ──"
+            echo "Path: $(pwd)/.env"
+            echo "Lines in .env: $(wc -l < .env)"
+            echo "Keys present: $(grep -E "^[A-Z_]+=" .env | sed "s/=.*//" | sort | tr "\n" " ")"
           '
 
       - name: Run deploy on server

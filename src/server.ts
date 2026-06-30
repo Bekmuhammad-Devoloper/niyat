@@ -149,6 +149,45 @@ export default {
         return corsPreflightResponse(request);
       }
 
+      // Diagnostic — brauzerdan ochib qaysi kalitlar server'da borligini ko'rish.
+      // Qiymatlarni KO'RSATMAYDI, faqat true/false. /api/_diag yoki /api/health
+      if (url.pathname === "/api/_diag" || url.pathname === "/api/health") {
+        const secrets = getSecrets(env);
+        const proc =
+          typeof process !== "undefined" && process?.env ? process.env : {};
+        return addCorsHeaders(
+          new Response(
+            JSON.stringify({
+              ok: true,
+              now: new Date().toISOString(),
+              cwd: typeof process !== "undefined" ? process.cwd?.() : "n/a",
+              secrets: {
+                OPENAI_API_KEY: !!secrets?.OPENAI_API_KEY,
+                GEMINI_API_KEY: !!secrets?.GEMINI_API_KEY,
+                ANTHROPIC_API_KEY: !!secrets?.ANTHROPIC_API_KEY,
+                ADMIN_PASSWORD: !!secrets?.ADMIN_PASSWORD,
+              },
+              processEnvDirect: {
+                OPENAI_API_KEY: !!proc.OPENAI_API_KEY,
+                GEMINI_API_KEY: !!proc.GEMINI_API_KEY,
+                ANTHROPIC_API_KEY: !!proc.ANTHROPIC_API_KEY,
+              },
+              envParam: {
+                hasOpenai: !!(env as { OPENAI_API_KEY?: string } | undefined)
+                  ?.OPENAI_API_KEY,
+                hasGemini: !!(env as { GEMINI_API_KEY?: string } | undefined)
+                  ?.GEMINI_API_KEY,
+              },
+            }, null, 2),
+            {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            },
+          ),
+          request,
+        );
+      }
+
       // Niyat AI Murabbiy API — TanStack handler'idan oldin interceptsiya.
       if (url.pathname === "/api/coach") {
         const secrets = getSecrets(env);
