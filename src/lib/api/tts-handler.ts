@@ -2,7 +2,8 @@
 //
 // `gpt-4o-mini-tts` modeli eng yangi va eng tabiiy. `instructions` parametri
 // orqali ohang/iltifot boshqarilishi mumkin — bu Murabbiy uchun ideal.
-// Default ovoz: "ash" — iliq, samimiy, do'stona erkak ovozi.
+// Default ovoz: "coral" — eng tabiiy multilingual ayol ovozi (2024-oktabr
+// yangiligi). O'zbek matnini ham aksentsiz va yumshoq talaffuz qiladi.
 //
 // Narxlar: ~$0.015/1K input + $0.030/1K output (har coach javobi ~$0.005-0.01)
 // Cache: brauzer HTTP cache (1 kun) + memory cache (mijoz tomonida)
@@ -12,16 +13,19 @@ import { logAiCall, userIdFromRequest } from "./ai-log";
 import type { D1Database } from "../db/types";
 
 const TTS_MODEL = "gpt-4o-mini-tts";
-// Ovoz tanlovi — Murabbiy uchun iliq, samimiy erkak ovozi
+// Ovoz tanlovi — Murabbiy uchun iliq, samimiy, tabiiy ayol ovozi
 // alloy, ash, ballad, coral, echo, fable, nova, onyx, sage, shimmer, verse
-const DEFAULT_VOICE = "ash";
+// coral = eng yangi (2024-okt) multilingual ayol ovozi — eng natural
+const DEFAULT_VOICE = "coral";
 
-// Ohang ko'rsatmasi — gpt-4o-mini-tts uchun. Sun'iy emas, do'st kabi gapirsin.
+// Ohang ko'rsatmasi — gpt-4o-mini-tts uchun. Sun'iy emas, ayol do'st kabi gapirsin.
 const VOICE_INSTRUCTIONS =
-  "Speak in a warm, gentle, and natural conversational tone like a caring older brother or trusted spiritual mentor. " +
+  "Speak in a warm, gentle, and natural conversational tone like a caring elder sister or a trusted female spiritual mentor. " +
   "Use soft emotional inflection, natural pauses, and a steady calm pace — not robotic. " +
-  "Speak Uzbek text with care and sincerity, as if comforting a friend. " +
-  "Show empathy and warmth in your voice — never sound flat or mechanical.";
+  "Speak Uzbek text with a clear, accent-free pronunciation, preserving Latin-script Uzbek spelling (sh, ch, oʻ, gʻ, ng). " +
+  "Do NOT speak with a Turkish, Russian, or English accent — pronounce Uzbek words as a native Uzbek speaker would. " +
+  "Stretch vowels lightly, let words breathe. Sound like a real woman speaking to a close friend with empathy and warmth — never flat, never mechanical. " +
+  "Names like Bekmuhammad, Olloh, Muhammad sollallohu alayhi va sallam must be pronounced with reverence and a brief gentle pause.";
 
 // Eslatma uchun maxsus ohang — mehribon ona kabi, yumshoq, samimiy,
 // lekin so'zlarni aniq talaffuz qilsin. Uzbek/Turkic so'zlarni nutq

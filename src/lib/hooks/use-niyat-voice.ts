@@ -88,7 +88,7 @@ export function useNiyatVoice(opts: { active: boolean }) {
 
         setState("speaking");
         try {
-          await tts.speak(cleanText, "shimmer", "default");
+          await tts.speak(cleanText, "coral", "default");
         } catch (err) {
           console.warn("[niyat-voice] TTS failed", err);
         }
@@ -147,7 +147,7 @@ export function useNiyatVoice(opts: { active: boolean }) {
         setAiResponse(greeting);
         setState("speaking");
         void tts
-          .speak(greeting, "shimmer", "default")
+          .speak(greeting, "coral", "default")
           .catch(() => undefined)
           .finally(() => {
             setState("idle");

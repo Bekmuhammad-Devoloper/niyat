@@ -53,7 +53,7 @@ export function useCoachTTS() {
   const speak = useCallback(
     async (
       text: string,
-      voice: string = "ash",
+      voice: string = "coral",
       mode: "default" | "reminder" = "default",
     ): Promise<void> => {
       const cleaned = text.trim();
