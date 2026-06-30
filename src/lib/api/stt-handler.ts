@@ -65,12 +65,20 @@ export async function handleSttRequest(
     });
   }
 
-  // Til hint — agar Whisper qabul qiluvchi til bo'lsa beramiz, aks holda
-  // (masalan "uz") undefined qilamiz va avto-aniqlash ishlaydi.
-  const rawLang = (formData.get("lang") as string | null) ?? "";
-  const langHint = WHISPER_SUPPORTED_LANGS.has(rawLang.toLowerCase())
-    ? rawLang.toLowerCase()
-    : undefined;
+  // Til hint — agar Whisper qabul qiluvchi til bo'lsa beramiz.
+  // O'zbek tili (uz) Whisper-1 da rasman yo'q, lekin o'zbek va turk
+  // turkiy oilaning yaqin a'zolari — Whisper'ning turk modeli o'zbekni
+  // anchagina yaxshi transkripsiya qiladi (avto-aniqlashdan ko'ra ancha
+  // yaxshi, chunki avto rus yoki ozar deb adashishi mumkin).
+  const rawLang = ((formData.get("lang") as string | null) ?? "").toLowerCase();
+  let langHint: string | undefined;
+  if (rawLang === "uz" || rawLang === "uzb") {
+    langHint = "tr"; // O'zbekcha audio uchun turk hint — eng yaxshi natija
+  } else if (WHISPER_SUPPORTED_LANGS.has(rawLang)) {
+    langHint = rawLang;
+  } else {
+    langHint = undefined;
+  }
 
   // Whisper filename kengaytmasini content-type bilan moslashtirib yuboradi.
   // Native plugin "audio/mp4" m4a yuboradi; web MediaRecorder "audio/webm";
