@@ -1,0 +1,27 @@
+# Sifat darvozasi — serverdagi niyat-autodeploy.timer shu `check` job
+# muvaffaqiyatli tugaganini kutadi va shundan keyingina deploy qiladi.
+# Deploy job YO'Q va kerak emas (server o'zi tortib oladi).
+name: check
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ["**.md"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx tsc --noEmit -p tsconfig.json
+      - run: npm run build
+      - run: npm run build:mobile
