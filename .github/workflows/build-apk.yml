@@ -44,8 +44,14 @@ jobs:
           distribution: "temurin"
           java-version: "21"
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      # ubuntu-latest runner'da Android SDK oldindan o'rnatilgan (ANDROID_HOME).
+      # android-actions/setup-android 2026-09 dan yiqila boshladi — kerak emas.
+      - name: Android SDK tekshiruvi (runner'da tayyor)
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          ls "$ANDROID_HOME/build-tools" | tail -3
+          ls "$ANDROID_HOME/platforms" | tail -3
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null 2>&1 || true
 
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
