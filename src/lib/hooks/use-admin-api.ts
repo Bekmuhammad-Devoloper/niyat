@@ -1,12 +1,12 @@
 // Admin backend API klienti — joriy admin paroli bilan so'rovlar yuboradi.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { getAdminSessionPassword } from "./use-admin-auth";
 
-// Admin paroli — local-auth hook joylab qo'ygan. Bu yerda foydalanamiz.
+// Admin paroli — login paytida server'da tekshirilib sessiyaga yozilgan.
+// Bundle ichida hech qanday parol YO'Q.
 function getAdminPassword(): string {
-  return (
-    (import.meta.env.VITE_ADMIN_PASSWORD as string | undefined) || "yuksalish2026"
-  );
+  return getAdminSessionPassword();
 }
 
 async function adminFetch<T>(path: string): Promise<T> {
@@ -277,7 +277,10 @@ export function useDeleteAnnouncement() {
         method: "DELETE",
         headers: { "x-admin-password": getAdminPassword() },
       });
-      if (!res.ok) throw new Error("DELETE failed");
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error ?? `HTTP ${res.status}`);
+      }
       return res.json();
     },
     onSuccess: () => {

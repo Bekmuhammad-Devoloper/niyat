@@ -53,7 +53,10 @@ async function handleSync(
   const now = Date.now();
   let saved = 0;
   for (const item of items) {
+    if (typeof item?.key !== "string") continue;
     if (!ALLOWED_KEYS.has(item.key)) continue;
+    // JSON.stringify(undefined) → undefined, .length xato beradi — o'tkazib yuboramiz
+    if (item.value === undefined) continue;
     const serialized = JSON.stringify(item.value);
     if (serialized.length > 500_000) continue; // 500 KB cheklov
     await db

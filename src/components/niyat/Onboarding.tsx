@@ -27,9 +27,11 @@ export function Onboarding({
   onDone,
 }: {
   initialFirstName: string;
-  onDone: (result: OnboardingResult) => void;
+  onDone: (result: OnboardingResult) => void | Promise<void>;
 }) {
   const [step, setStep] = useState<Step>(0);
+  // Yakuniy submit'ni ikki marta bosishdan himoya (register so'rovi ketayotganda)
+  const [submitting, setSubmitting] = useState(false);
   const [firstName, setFirstName] = useState(
     initialFirstName === "do'st" ? "" : initialFirstName,
   );
@@ -45,16 +47,22 @@ export function Onboarding({
     return true;
   };
 
-  const next = () => {
+  const next = async () => {
     if (!canGo()) return;
     if (step === 3) {
-      onDone({
-        firstName: firstName.trim() || "do'st",
-        lastName: lastName.trim(),
-        phone: cleanPhone(phoneRaw),
-        password,
-        niyat: niyat.trim(),
-      });
+      if (submitting) return;
+      setSubmitting(true);
+      try {
+        await onDone({
+          firstName: firstName.trim() || "do'st",
+          lastName: lastName.trim(),
+          phone: cleanPhone(phoneRaw),
+          password,
+          niyat: niyat.trim(),
+        });
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
     setStep((s) => (s + 1) as Step);
@@ -102,7 +110,7 @@ export function Onboarding({
           className="mt-8 w-full max-w-[320px]"
           onSubmit={(e) => {
             e.preventDefault();
-            next();
+            void next();
           }}
         >
           {step === 0 && (
@@ -129,11 +137,11 @@ export function Onboarding({
             )}
             <button
               type="submit"
-              disabled={!canGo()}
+              disabled={!canGo() || submitting}
               className="flex-1 h-12 rounded-xl bg-primary text-primary-foreground text-[14px] font-semibold disabled:opacity-40 active:scale-[0.98] transition inline-flex items-center justify-center gap-2"
             >
-              {step === 3 ? "Boshlash" : "Davom etish"}
-              <ArrowRight size={16} />
+              {submitting ? "Yuklanmoqda..." : step === 3 ? "Boshlash" : "Davom etish"}
+              {!submitting && <ArrowRight size={16} />}
             </button>
           </div>
         </form>

@@ -69,16 +69,18 @@ export function useSunnat() {
 
   const markApplied = (sunnat: Sunnat) => {
     const key = todayKey();
-    setProgress({
-      appliedByDate: { ...progress.appliedByDate, [key]: sunnat.id },
-    });
+    setProgress((prev) => ({
+      appliedByDate: { ...(prev.appliedByDate ?? {}), [key]: sunnat.id },
+    }));
   };
 
   const unmark = () => {
     const key = todayKey();
-    const next = { ...progress.appliedByDate };
-    delete next[key];
-    setProgress({ appliedByDate: next });
+    setProgress((prev) => {
+      const next = { ...(prev.appliedByDate ?? {}) };
+      delete next[key];
+      return { appliedByDate: next };
+    });
   };
 
   return { ...result, markApplied, unmark };

@@ -8,7 +8,7 @@ import {
   verifyPassword,
   type UserProfile,
 } from "@/lib/hooks/use-user-profile";
-import { useAuthApi, isAuthError } from "@/lib/hooks/use-auth-api";
+import { useAuthApi, isAuthError, setAuthToken } from "@/lib/hooks/use-auth-api";
 
 // Logout'dan keyin foydalanuvchi qayta kirish uchun ko'rsatiladi.
 // Telefon + parol localStorage'dagi profilga moslashtiriladi.
@@ -172,6 +172,9 @@ export function LoginScreen({
                   "Parolni unutdingizmi? Hisobni nollab, qaytadan ro'yxatdan o'tasiz. Saqlangan niyat va statistika qoladi, lekin yangi parol o'rnatishingiz kerak.",
                 )
               ) {
+                // Eski server token'i yangi parol bilan mos kelmaydi —
+                // uni ham tozalaymiz, aks holda "yarim kirgan" holat qoladi.
+                setAuthToken(null);
                 onReset();
               }
             }}

@@ -1,7 +1,15 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Search, UserPlus, Server, Sparkles, X, ChevronRight } from "lucide-react";
+import {
+  Search,
+  UserPlus,
+  Server,
+  Sparkles,
+  X,
+  ChevronRight,
+  ChevronLeft,
+} from "lucide-react";
 import {
   useAdminUsers,
   useSetUserPremium,
@@ -17,12 +25,25 @@ function formatDate(ts: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+const PAGE_SIZE = 50;
+
 function UsersPage() {
   const [search, setSearch] = useState("");
-  const { data, isLoading, isError, error } = useAdminUsers({ search });
+  const [page, setPage] = useState(0);
+  const { data, isLoading, isError, error } = useAdminUsers({
+    search,
+    limit: PAGE_SIZE,
+    offset: page * PAGE_SIZE,
+  });
   const users = data?.users ?? [];
   const totalCount = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const [premiumModal, setPremiumModal] = useState<AdminUser | null>(null);
+
+  const onSearchChange = (value: string) => {
+    setSearch(value);
+    setPage(0); // qidiruv o'zgarsa — birinchi sahifaga
+  };
 
   return (
     <div className="space-y-6">
@@ -61,7 +82,7 @@ function UsersPage() {
           <input
             type="text"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => onSearchChange(e.target.value)}
             placeholder="Ism, familiya yoki telefon..."
             className="w-full bg-card border border-border rounded-xl pl-9 pr-4 py-2.5 text-[13px] text-foreground placeholder:text-tertiary outline-none focus:border-primary/60"
           />
@@ -156,6 +177,40 @@ function UsersPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination — 50 tadan ortiq foydalanuvchi bo'lsa */}
+      {totalCount > PAGE_SIZE && (
+        <div className="flex items-center justify-between text-[12px] text-tertiary">
+          <span className="tabular">
+            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} / {totalCount}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={page === 0}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              aria-label="Oldingi sahifa"
+              className="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-border text-foreground disabled:opacity-40 hover:bg-elevated/50 transition"
+            >
+              <ChevronLeft size={14} />
+              Oldingi
+            </button>
+            <span className="tabular">
+              {page + 1} / {pageCount}
+            </span>
+            <button
+              type="button"
+              disabled={page + 1 >= pageCount}
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+              aria-label="Keyingi sahifa"
+              className="inline-flex items-center gap-1 h-8 px-3 rounded-lg border border-border text-foreground disabled:opacity-40 hover:bg-elevated/50 transition"
+            >
+              Keyingi
+              <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {premiumModal && (
         <PremiumModal

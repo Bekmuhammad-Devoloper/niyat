@@ -235,12 +235,15 @@ export function getTodayZamSurahs(date: Date = new Date()): ShortSurah[] {
   const start = new Date(date.getFullYear(), 0, 0);
   const dayOfYear = Math.floor((date.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
   const total = ZAM_SURAHS.length;
-  // 3 ta turli pozitsiya — dayOfYear bo'yicha siljiydi
-  return [
-    ZAM_SURAHS[dayOfYear % total],
-    ZAM_SURAHS[(dayOfYear * 7 + 13) % total],
-    ZAM_SURAHS[(dayOfYear * 11 + 29) % total],
-  ];
+  // 3 ta turli pozitsiya — dayOfYear bo'yicha siljiydi.
+  // Indekslar ba'zi kunlarda ustma-ust tushishi mumkin (dublikat sura va
+  // React key xatosi) — shu sabab har birini oldingilaridan farqli qilamiz.
+  const first = dayOfYear % total;
+  let second = (dayOfYear * 7 + 13) % total;
+  if (second === first) second = (second + 1) % total;
+  let third = (dayOfYear * 11 + 29) % total;
+  while (third === first || third === second) third = (third + 1) % total;
+  return [ZAM_SURAHS[first], ZAM_SURAHS[second], ZAM_SURAHS[third]];
 }
 
 export const memorization = {

@@ -149,9 +149,36 @@ export default {
         return corsPreflightResponse(request);
       }
 
+      // Health — ochiq, lekin faqat {ok, now}. Hech qanday ichki ma'lumot yo'q.
+      if (url.pathname === "/api/health") {
+        return addCorsHeaders(
+          new Response(JSON.stringify({ ok: true, now: new Date().toISOString() }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+          request,
+        );
+      }
+
       // Diagnostic — brauzerdan ochib qaysi kalitlar server'da borligini ko'rish.
-      // Qiymatlarni KO'RSATMAYDI, faqat true/false va metadata.
-      if (url.pathname === "/api/_diag" || url.pathname === "/api/health") {
+      // Qiymatlarni KO'RSATMAYDI, faqat true/false va metadata. Lekin fayl
+      // yo'llari, env kalit nomlari va cwd chiqadi — shuning uchun FAQAT admin
+      // paroli bilan (x-admin-password header yoki ?key= query) ochiladi.
+      if (url.pathname === "/api/_diag") {
+        const diagSecrets = getSecrets(env);
+        // admin-handler.ts bilan bir xil dev fallback (ADMIN_PASSWORD sozlanmagan bo'lsa)
+        const expected = diagSecrets.ADMIN_PASSWORD || "yuksalish2026";
+        const provided =
+          request.headers.get("x-admin-password") ?? url.searchParams.get("key") ?? "";
+        if (provided !== expected) {
+          return addCorsHeaders(
+            new Response(JSON.stringify({ error: "Admin auth talab qilinadi" }), {
+              status: 401,
+              headers: { "content-type": "application/json" },
+            }),
+            request,
+          );
+        }
         // Disk'dagi haqiqiy .env fayllarini tekshiramiz. existsSync + key list.
         const envFiles: Array<{
           path: string;
@@ -163,6 +190,8 @@ export default {
         try {
           const { existsSync, readFileSync, statSync } = await import("node:fs");
           const candidates = [
+            "/opt/niyat/app/.env",
+            "/opt/niyat/app/.dev.vars",
             "/home/bekmuhammad_devoloper/niyat/.env",
             "/root/.env",
             "/etc/niyat/.env",
@@ -363,6 +392,23 @@ export default {
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);
+      // /api/* uchun HTML emas, JSON + CORS qaytaramiz — aks holda APK
+      // "fetch failed" (CORS yo'q) oladi, web esa JSON parse qila olmaydi.
+      let isApi = false;
+      try {
+        isApi = new URL(request.url).pathname.startsWith("/api/");
+      } catch {
+        /* ignore */
+      }
+      if (isApi) {
+        return addCorsHeaders(
+          new Response(JSON.stringify({ error: "Server xatosi" }), {
+            status: 500,
+            headers: { "content-type": "application/json; charset=utf-8" },
+          }),
+          request,
+        );
+      }
       return brandedErrorResponse();
     }
   },

@@ -6,7 +6,6 @@ import {
   getTodayQuranSurah,
   getTodayZamSurahs,
   memorization,
-  prayers as fallbackPrayers,
   quranToday,
   todayHadith,
 } from "@/lib/niyat-data";
@@ -20,14 +19,24 @@ import { KaabaSheet } from "../KaabaSheet";
 
 type SadaqaEntry = {
   id: string;
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD (lokal sana)
   description: string;
 };
+
+// Lokal sana kaliti — toISOString() UTC beradi va kechqurun (UTC+5) noto'g'ri
+// kunni qaytaradi. Kalendar/kunlik hisob shu formatga tayanadi.
+function toLocalDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 export function WorshipScreen() {
   const daysInMonth = getDaysInCurrentMonth();
   const { prayers: livePrayers, isLoading, isError } = usePrayerTimes();
-  const prayers = livePrayers ?? fallbackPrayers;
+  // Mock vaqtlarni ko'rsatmaymiz — yuklanmasa bo'sh ro'yxat + izoh.
+  const prayers = livePrayers ?? [];
 
   const [quranOpen, setQuranOpen] = useState(false);
   // MemorizationSheet endi `Barcha suralar`'dan tanlangan surani ham qabul qiladi
@@ -57,17 +66,17 @@ export function WorshipScreen() {
 
   const today = new Date();
   const todayDay = today.getDate();
+  const todayKey = toLocalDateKey(today);
+  const monthPrefix = todayKey.slice(0, 7);
   const sadaqaDoneDays = sadaqaLog
-    .filter((e) => e.date.startsWith(today.toISOString().slice(0, 7)))
+    .filter((e) => e.date.startsWith(monthPrefix))
     .map((e) => Number(e.date.slice(-2)));
-  const todaySadaqa = sadaqaLog.find(
-    (e) => e.date === today.toISOString().slice(0, 10),
-  );
+  const todaySadaqa = sadaqaLog.find((e) => e.date === todayKey);
 
   const isFavorite = favorites.includes(todayHadith.text);
 
   const addSadaqa = (desc: string) => {
-    const date = today.toISOString().slice(0, 10);
+    const date = todayKey;
     setSadaqaLog([
       ...sadaqaLog,
       { id: `s-${Date.now()}`, date, description: desc },
@@ -92,6 +101,11 @@ export function WorshipScreen() {
           {isLoading && <span className="text-[9px] text-tertiary tabular">yuklanyapti...</span>}
           {isError && <span className="text-[9px] text-destructive tabular">offline</span>}
         </div>
+        {prayers.length === 0 && (
+          <p className="mt-4 text-[12px] text-tertiary text-center font-serif italic">
+            {isLoading ? "Namoz vaqtlari yuklanmoqda..." : "Namoz vaqtlari yuklanmadi"}
+          </p>
+        )}
         <div className="mt-4 flex justify-between">
           {prayers.map((p) => {
             const filled = p.state === "done";

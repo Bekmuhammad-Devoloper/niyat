@@ -67,6 +67,11 @@ export async function loadSunnats(): Promise<Sunnat[]> {
       cache = data;
       loadingPromise = null;
       return data;
+    })
+    .catch((e: unknown) => {
+      // Xato bo'lsa promise'ni tashlab yuboramiz — keyingi chaqiruv qayta uradi
+      loadingPromise = null;
+      throw e;
     });
   return loadingPromise;
 }

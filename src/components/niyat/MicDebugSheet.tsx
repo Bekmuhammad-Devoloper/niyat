@@ -362,9 +362,9 @@ function MicTestDiagnostic() {
 
 function timeAgo(at: number): string {
   const sec = Math.floor((Date.now() - at) / 1000);
-  if (sec < 60) return `${sec}s`;
+  if (sec < 60) return `${sec} son`;
   const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}d`;
+  if (min < 60) return `${min} daq`;
   const h = Math.floor(min / 60);
-  return `${h}s`;
+  return `${h} soat`;
 }

@@ -44,6 +44,12 @@ export function useWakeWord(opts: {
 }) {
   const { enabled, voiceModeOpen, onWake } = opts;
   const lastWakeRef = useRef(0);
+  // onWake ko'pincha inline arrow — har render'da yangi. Effect qayta
+  // ishga tushmasligi uchun ref orqali o'qiymiz.
+  const onWakeRef = useRef(onWake);
+  useEffect(() => {
+    onWakeRef.current = onWake;
+  }, [onWake]);
 
   // ====== NATIVE (Android APK) ======
   useEffect(() => {
@@ -51,36 +57,31 @@ export function useWakeWord(opts: {
     if (!Capacitor.isNativePlatform()) return;
     if (voiceModeOpen) return;
 
-    let removeListener: { remove: () => Promise<void> } | null = null;
-    let cancelled = false;
-
-    (async () => {
-      try {
-        const { registerPlugin } = await import("@capacitor/core");
-        const plugin = registerPlugin<{
-          addListener: (
-            event: "wakeWord",
-            cb: (data: WakeWordEvent) => void,
-          ) => Promise<{ remove: () => Promise<void> }>;
-        }>("BackgroundMic");
-        if (cancelled) return;
-        const handle = await plugin.addListener("wakeWord", (data) => {
-          const now = Date.now();
-          if (now - lastWakeRef.current < COOLDOWN_MS) return;
-          lastWakeRef.current = now;
-          onWake("native", data?.text ?? "");
-        });
-        removeListener = handle;
-      } catch (err) {
-        console.warn("[wake-word] native listener failed", err);
-      }
+    // Promise'ni saqlaymiz — cleanup addListener resolve bo'lishidan oldin
+    // ishlasa ham handle keyin albatta remove qilinadi.
+    const handleP = (async () => {
+      const { registerPlugin } = await import("@capacitor/core");
+      const plugin = registerPlugin<{
+        addListener: (
+          event: "wakeWord",
+          cb: (data: WakeWordEvent) => void,
+        ) => Promise<{ remove: () => Promise<void> }>;
+      }>("BackgroundMic");
+      return plugin.addListener("wakeWord", (data) => {
+        const now = Date.now();
+        if (now - lastWakeRef.current < COOLDOWN_MS) return;
+        lastWakeRef.current = now;
+        onWakeRef.current("native", data?.text ?? "");
+      });
     })();
+    handleP.catch((err) => {
+      console.warn("[wake-word] native listener failed", err);
+    });
 
     return () => {
-      cancelled = true;
-      void removeListener?.remove();
+      void handleP.then((h) => h.remove()).catch(() => undefined);
     };
-  }, [enabled, voiceModeOpen, onWake]);
+  }, [enabled, voiceModeOpen]);
 
   // ====== WEB fallback ======
   // BackgroundMic faqat APK'da bor. Web'da brauzerdan ovozni tinglaymiz

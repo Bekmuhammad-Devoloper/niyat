@@ -117,7 +117,9 @@ export function CoachScreen() {
     };
   }, [releaseMic]);
 
-  const isCoachTyping = coach.isPending && !streamingText;
+  // Streaming boshlanishi bilan (hatto bo'sh "" bo'lsa ham) nuqtalar yashiriladi —
+  // aks holda nuqtalar va bo'sh streaming blok bir vaqtda ko'rinadi.
+  const isCoachTyping = coach.isPending && streamingText === null;
 
   useEffect(() => {
     const node = scrollRef.current;

@@ -86,13 +86,16 @@ function setupMediaSession(surah: PlayingSurah): void {
 export function playQuranAudio(url: string, surah: PlayingSurah): void {
   const a = ensureAudio();
   if (!a) return;
-  // Yangi sura — manba almashtirilsin
+  // Manba faqat o'zgarganda almashtiriladi (bir xil URL'ni qayta
+  // yuklamaymiz). Lekin currentSurah/loop/MediaSession HAR SAFAR yangilanadi —
+  // "ended"dan keyin currentSurah null bo'lib qoladi va shu URL qayta
+  // chalinganda UI'da sura ko'rinmay qolar edi.
   if (a.src !== url) {
     a.src = url;
-    a.loop = surah.loop === true;
-    currentSurah = surah;
-    setupMediaSession(surah);
   }
+  a.loop = surah.loop === true;
+  currentSurah = surah;
+  setupMediaSession(surah);
   a.play().catch((err) => {
     console.warn("[quran-player] play failed", err);
   });

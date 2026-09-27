@@ -1,9 +1,20 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useLocalState } from "@/lib/use-local-state";
 import { DEFAULT_SETTINGS, type Settings } from "@/lib/settings";
 
 export function useSettings() {
-  const [settings, setSettings] = useLocalState<Settings>("niyat:settings", DEFAULT_SETTINGS);
+  const [stored, setSettings] = useLocalState<Settings>("niyat:settings", DEFAULT_SETTINGS);
+  // Eski install'larda yangi kalitlar bo'lmasligi mumkin — default bilan
+  // birlashtiramiz (ichki notifications/voice obyektlari ham).
+  const settings = useMemo<Settings>(
+    () => ({
+      ...DEFAULT_SETTINGS,
+      ...stored,
+      notifications: { ...DEFAULT_SETTINGS.notifications, ...(stored.notifications ?? {}) },
+      voice: { ...DEFAULT_SETTINGS.voice, ...(stored.voice ?? {}) },
+    }),
+    [stored],
+  );
 
   // Qisman yangilash uchun yordamchi.
   const update = useCallback(

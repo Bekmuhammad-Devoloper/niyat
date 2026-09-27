@@ -64,11 +64,17 @@ function buildReminderMessage(firstName: string, goalTitle: string): string {
   return `Ey Muhammad sollallohu alayhi va sallam ummatidan ${name}, siz "${goalTitle}" maqsadingizni bajarmadingiz. Bu sizning maqsadingiz edi.`;
 }
 
+// Bir xil matn uchun MP3 qayta render qilinmasin — goals har o'zgarganda
+// /api/tts'ga yana so'rov ketmasligi uchun modul darajasidagi cache.
+const reminderMp3Cache = new Map<string, string>();
+
 // Server TTS'dan MP3 olish va base64'ga aylantirish. Native plugin'ga
 // uzatish uchun ishlatiladi (oldindan MP3'ni saqlab qo'yish — keyin ilova
 // yopiq bo'lganda ham yumshoq tabiiy ovoz ijro etiladi). Xato bo'lsa null
 // qaytariladi va plugin Android ichki TTS engine'iga o'tadi.
 async function renderReminderMp3Base64(text: string): Promise<string | null> {
+  const cached = reminderMp3Cache.get(text);
+  if (cached) return cached;
   try {
     const apiBase = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
     const res = await fetch(`${apiBase}/api/tts`, {
@@ -94,7 +100,9 @@ async function renderReminderMp3Base64(text: string): Promise<string | null> {
         Array.from(bytes.subarray(i, i + chunk)),
       );
     }
-    return btoa(binary);
+    const b64 = btoa(binary);
+    reminderMp3Cache.set(text, b64);
+    return b64;
   } catch (err) {
     console.warn("[goal-reminders] mp3 pre-render failed", err);
     return null;
@@ -235,6 +243,12 @@ export function useGoalReminders() {
   const { profile } = useUserProfile();
   const { settings } = useSettings();
   const tts = useCoachTTS();
+  // tts obyekti har render'da yangi — listener effect'i har safar qayta
+  // ro'yxatdan o'tmasligi uchun ref orqali o'qiymiz.
+  const ttsRef = useRef(tts);
+  useEffect(() => {
+    ttsRef.current = tts;
+  }, [tts]);
   const timersRef = useRef<number[]>([]);
   // Bir kun ichida bir maqsad uchun bir martagina ishga tushishi uchun
   const firedRef = useRef<Set<string>>(new Set());
@@ -307,9 +321,8 @@ export function useGoalReminders() {
         fireAt.setHours(h ?? 0, m ?? 0, 0, 0);
         if (fireAt.getTime() <= now.getTime()) continue;
 
-        // ID — barqaror raqam (goal id'dan hash). Bir kun ichida bir xil bo'lishi
-        // muhim — qayta rejalashtirilganda dublikat bo'lmasligi uchun.
-        const baseId = hashString(g.id) & 0x7fffffff;
+        // ID — barqaror raqam (goal id'dan hash + stage). Bir kun ichida bir xil
+        // bo'lishi muhim — qayta rejalashtirilganda dublikat bo'lmasligi uchun.
         const name =
           profile.firstName && profile.firstName !== "do'st"
             ? profile.firstName
@@ -317,7 +330,7 @@ export function useGoalReminders() {
 
         // 1) Birinchi notification — aniq vaqtda (oddiy yozuvli)
         scheduleList.push({
-          id: baseId,
+          id: reminderNotifId(g.id, 0),
           title: `Reja vaqti: ${g.title}`,
           body: `Soat ${g.timeOfDay} — "Bugun bajardim" tugmasini bosing`,
           schedule: { at: fireAt, allowWhileIdle: true },
@@ -332,7 +345,7 @@ export function useGoalReminders() {
         const followupAt = new Date(fireAt.getTime() + delayMin * 60 * 1000);
         const voicePhrase = buildReminderMessage(profile.firstName, g.title);
         scheduleList.push({
-          id: baseId + 1,
+          id: reminderNotifId(g.id, 1),
           title: `🔔 ${name}, niyatingiz`,
           body: voicePhrase,
           schedule: { at: followupAt, allowWhileIdle: true },
@@ -348,6 +361,7 @@ export function useGoalReminders() {
       } catch (err) {
         console.warn("[goal-reminders] schedule failed", err);
       }
+      if (cancelled) return;
 
       // VoiceReminder native plugin — ilova yopiq bo'lganda ham
       // Android TTS engine'i orqali matnni baland ovozda o'qib beradi.
@@ -357,6 +371,7 @@ export function useGoalReminders() {
       } catch (err) {
         console.warn("[goal-reminders] voiceReminder cancelAll failed", err);
       }
+      if (cancelled) return;
 
       for (const g of goals) {
         if (!shouldShowToday(g, now)) continue;
@@ -369,15 +384,18 @@ export function useGoalReminders() {
         const followupAt = fireAt.getTime() + delayMin * 60 * 1000;
         if (followupAt <= now.getTime()) continue;
 
-        const baseId = hashString(g.id) & 0x7fffffff;
         const voicePhrase = buildReminderMessage(profile.firstName, g.title);
         // OpenAI'dan yumshoq tabiiy ayol ovozi bilan MP3 oldindan tayyorlaymiz.
         // Native plugin uni cache faylga saqlab, alarm vaqtida MediaPlayer
         // bilan ijro etadi (robotik TTS engine emas — shirali tabiiy ovoz).
         const audioBase64 = await renderReminderMp3Base64(voicePhrase);
+        // Effect qayta ishga tushgan (goals o'zgargan) bo'lsa — eskirgan
+        // ro'yxat bo'yicha rejalashtirmaymiz (bajarilgan/o'chirilgan maqsad
+        // uchun eslatma ketib qolmasin)
+        if (cancelled) return;
         try {
           await VoiceReminder.schedule({
-            id: baseId + 2, // notification ID'lari bilan to'qnashmasligi uchun
+            id: reminderNotifId(g.id, 2), // notification ID'lari bilan to'qnashmasligi uchun
             text: voicePhrase, // fallback uchun
             audioBase64: audioBase64 ?? undefined,
             triggerAtMs: followupAt,
@@ -385,6 +403,7 @@ export function useGoalReminders() {
         } catch (err) {
           console.warn("[goal-reminders] voiceReminder schedule failed", err);
         }
+        if (cancelled) return;
       }
     })();
 
@@ -405,57 +424,56 @@ export function useGoalReminders() {
     if (!IS_NATIVE) return;
     if (!settings.notifications.goalVoiceReminderEnabled) return;
 
-    let receivedHandle: { remove: () => Promise<void> } | null = null;
-    let actionHandle: { remove: () => Promise<void> } | null = null;
-
-    (async () => {
-      try {
-        receivedHandle = await LocalNotifications.addListener(
-          "localNotificationReceived",
-          (notif) => {
-            const extra = (notif.extra ?? {}) as {
-              type?: string;
-              stage?: string;
-              goalId?: string;
-            };
-            if (extra.type !== "goal-reminder") return;
-            if (extra.stage !== "followup") return;
-            if (!extra.goalId) return;
-            const fresh = readFreshGoal(extra.goalId);
-            if (!fresh) return;
-            if (isCompletedToday(fresh)) return;
-            const message = buildReminderMessage(profile.firstName, fresh.title);
-            void speakReminder(tts, message);
-          },
-        );
-        // Foydalanuvchi notification'ga bosganda ham — TTS o'qib bersin
-        actionHandle = await LocalNotifications.addListener(
-          "localNotificationActionPerformed",
-          (action) => {
-            const extra = (action.notification.extra ?? {}) as {
-              type?: string;
-              stage?: string;
-              goalId?: string;
-            };
-            if (extra.type !== "goal-reminder") return;
-            if (!extra.goalId) return;
-            const fresh = readFreshGoal(extra.goalId);
-            if (!fresh) return;
-            if (isCompletedToday(fresh)) return;
-            const message = buildReminderMessage(profile.firstName, fresh.title);
-            void speakReminder(tts, message);
-          },
-        );
-      } catch (err) {
-        console.warn("[goal-reminders] addListener failed", err);
-      }
-    })();
+    // Promise'larni saqlaymiz — cleanup addListener resolve bo'lishidan oldin
+    // ishlasa ham handle keyin albatta remove qilinadi (listener oqib ketmasin).
+    const receivedP = LocalNotifications.addListener(
+      "localNotificationReceived",
+      (notif) => {
+        const extra = (notif.extra ?? {}) as {
+          type?: string;
+          stage?: string;
+          goalId?: string;
+        };
+        if (extra.type !== "goal-reminder") return;
+        if (extra.stage !== "followup") return;
+        if (!extra.goalId) return;
+        const fresh = readFreshGoal(extra.goalId);
+        if (!fresh) return;
+        if (isCompletedToday(fresh)) return;
+        const message = buildReminderMessage(profile.firstName, fresh.title);
+        void speakReminder(ttsRef.current, message);
+      },
+    );
+    // Foydalanuvchi notification'ga bosganda ham — TTS o'qib bersin
+    const actionP = LocalNotifications.addListener(
+      "localNotificationActionPerformed",
+      (action) => {
+        const extra = (action.notification.extra ?? {}) as {
+          type?: string;
+          stage?: string;
+          goalId?: string;
+        };
+        if (extra.type !== "goal-reminder") return;
+        if (!extra.goalId) return;
+        const fresh = readFreshGoal(extra.goalId);
+        if (!fresh) return;
+        if (isCompletedToday(fresh)) return;
+        const message = buildReminderMessage(profile.firstName, fresh.title);
+        void speakReminder(ttsRef.current, message);
+      },
+    );
+    receivedP.catch((err) => {
+      console.warn("[goal-reminders] addListener failed", err);
+    });
+    actionP.catch((err) => {
+      console.warn("[goal-reminders] addListener failed", err);
+    });
 
     return () => {
-      void receivedHandle?.remove();
-      void actionHandle?.remove();
+      void receivedP.then((h) => h.remove()).catch(() => undefined);
+      void actionP.then((h) => h.remove()).catch(() => undefined);
     };
-  }, [profile.firstName, settings.notifications.goalVoiceReminderEnabled, tts]);
+  }, [profile.firstName, settings.notifications.goalVoiceReminderEnabled]);
 
   // ========== WEB / brauzer yo'l ==========
   // Ilova ochiq turganda — browser notification + TTS audio.
@@ -550,6 +568,16 @@ export function useGoalReminders() {
     settings.notifications.goalVoiceReminderDelayMinutes,
     tts,
   ]);
+}
+
+// Notification ID — goal hash'idan bosqich (stage) bilan:
+//   stage 0 = initial notification, 1 = followup notification, 2 = VoiceReminder
+// Ilgari baseId+1/+2 ishlatilar edi — hash 0x7fffffff'ga yaqin bo'lsa Java
+// int'dan oshib ketar yoki boshqa maqsad ID'si bilan to'qnashar edi.
+// Hozir: (hash & 0x1fffffff) * 4 + stage  ≤  (2^29 - 1) * 4 + 3  =  2^31 - 1
+// — har doim Java int chegarasida va har (goal, stage) juftligi noyob.
+function reminderNotifId(goalId: string, stage: 0 | 1 | 2): number {
+  return (hashString(goalId) & 0x1fffffff) * 4 + stage;
 }
 
 // Barqaror raqamli ID — goal.id stringidan

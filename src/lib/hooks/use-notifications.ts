@@ -52,9 +52,48 @@ function adhanNotifId(prayerName: string, dayOffset: number = 0): number {
 
 export type NotificationPermissionState = "default" | "granted" | "denied" | "unsupported";
 
+// Web (brauzer) — window.Notification. Native (Capacitor WebView) da bu API
+// yo'q — holat LocalNotifications.checkPermissions() orqali effect'da olinadi.
 function currentPermission(): NotificationPermissionState {
+  if (IS_NATIVE) return "default";
   if (typeof window === "undefined" || !("Notification" in window)) return "unsupported";
   return Notification.permission as NotificationPermissionState;
+}
+
+// Capacitor PermissionState → bizning holat
+function mapNativePermission(display: string): NotificationPermissionState {
+  if (display === "granted") return "granted";
+  if (display === "denied") return "denied";
+  return "default";
+}
+
+// Oddiy (darhol chiqadigan) notification uchun umumiy kanal — Android 8+
+const GENERAL_CHANNEL_ID = "niyat-general";
+let generalChannelCreated = false;
+async function ensureGeneralChannel(): Promise<void> {
+  if (!IS_NATIVE || generalChannelCreated) return;
+  try {
+    await LocalNotifications.createChannel({
+      id: GENERAL_CHANNEL_ID,
+      name: "Eslatmalar",
+      description: "Namoz, niyat, sunnat va juma eslatmalari",
+      importance: 4, // HIGH — heads-up
+      visibility: 1,
+      sound: "default",
+      vibration: true,
+    });
+    generalChannelCreated = true;
+  } catch (err) {
+    console.warn("[notifications] general channel create failed", err);
+  }
+}
+
+// Native notify() uchun noyob ID — Java int chegarasida, boshqa prefixlar
+// (0x60000000 adhan) bilan to'qnashmasligi uchun 0x50000000 oralig'i.
+let nativeNotifySeq = 0;
+function nativeNotifyId(): number {
+  nativeNotifySeq = (nativeNotifySeq + 1) % 0x0fffffff;
+  return 0x50000000 | ((Date.now() + nativeNotifySeq) % 0x0fffffff);
 }
 
 function parseHMM(time: string, now: Date): Date {
@@ -70,7 +109,34 @@ export function useNotifications() {
   const { prayers } = usePrayerTimes();
   const scheduledRef = useRef<number[]>([]);
 
+  // Native: boshlang'ich ruxsat holatini plugin'dan o'qiymiz
+  useEffect(() => {
+    if (!IS_NATIVE) return;
+    let cancelled = false;
+    LocalNotifications.checkPermissions()
+      .then((res) => {
+        if (!cancelled) setPermission(mapNativePermission(res.display));
+      })
+      .catch((err) => {
+        console.warn("[notifications] checkPermissions failed", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const request = useCallback(async (): Promise<boolean> => {
+    if (IS_NATIVE) {
+      try {
+        const res = await LocalNotifications.requestPermissions();
+        const next = mapNativePermission(res.display);
+        setPermission(next);
+        return next === "granted";
+      } catch (err) {
+        console.warn("[notifications] requestPermissions failed", err);
+        return false;
+      }
+    }
     if (typeof window === "undefined" || !("Notification" in window)) return false;
     const res = await Notification.requestPermission();
     setPermission(res as NotificationPermissionState);
@@ -80,6 +146,31 @@ export function useNotifications() {
   const notify = useCallback(
     (title: string, body: string, options?: { onClick?: () => void; tag?: string }) => {
       if (permission !== "granted") return;
+      // Native (Capacitor WebView) — window.Notification yo'q, LocalNotifications
+      // orqali darhol (200ms) chiqadigan notification rejalashtiramiz.
+      // onClick native'da qo'llanmaydi (notification bosilganda ilova ochiladi).
+      if (IS_NATIVE) {
+        void (async () => {
+          try {
+            await ensureGeneralChannel();
+            await LocalNotifications.schedule({
+              notifications: [
+                {
+                  id: nativeNotifyId(),
+                  title,
+                  body,
+                  schedule: { at: new Date(Date.now() + 200) },
+                  channelId: GENERAL_CHANNEL_ID,
+                  extra: { type: "general", tag: options?.tag ?? "" },
+                },
+              ],
+            });
+          } catch (err) {
+            console.warn("[notifications] native notify failed", err);
+          }
+        })();
+        return;
+      }
       try {
         const n = new Notification(title, {
           body,
@@ -457,38 +548,38 @@ export function useNotifications() {
 
     const url = settings.notifications.adhanUrl || DEFAULT_ADHAN_URL;
     const loop = settings.notifications.adhanLeadMinutes !== 0;
-    let recvHandle: { remove: () => Promise<void> } | null = null;
-    let actHandle: { remove: () => Promise<void> } | null = null;
 
-    (async () => {
-      try {
-        recvHandle = await LocalNotifications.addListener(
-          "localNotificationReceived",
-          (notif) => {
-            const ex = (notif.extra ?? {}) as { type?: string; prayerName?: string };
-            if (ex.type !== "adhan-prayer") return;
-            playAdhanAudio(url, `${ex.prayerName ?? "Azon"} azoni`, loop);
-          },
-        );
-        actHandle = await LocalNotifications.addListener(
-          "localNotificationActionPerformed",
-          (action) => {
-            const ex = (action.notification.extra ?? {}) as {
-              type?: string;
-              prayerName?: string;
-            };
-            if (ex.type !== "adhan-prayer") return;
-            playAdhanAudio(url, `${ex.prayerName ?? "Azon"} azoni`, loop);
-          },
-        );
-      } catch (err) {
-        console.warn("[adhan-native] listener failed", err);
-      }
-    })();
+    // Promise'larni saqlaymiz — cleanup addListener resolve bo'lishidan oldin
+    // ishlasa ham handle keyin albatta remove qilinadi (listener oqib ketmasin).
+    const recvP = LocalNotifications.addListener(
+      "localNotificationReceived",
+      (notif) => {
+        const ex = (notif.extra ?? {}) as { type?: string; prayerName?: string };
+        if (ex.type !== "adhan-prayer") return;
+        playAdhanAudio(url, `${ex.prayerName ?? "Azon"} azoni`, loop);
+      },
+    );
+    const actP = LocalNotifications.addListener(
+      "localNotificationActionPerformed",
+      (action) => {
+        const ex = (action.notification.extra ?? {}) as {
+          type?: string;
+          prayerName?: string;
+        };
+        if (ex.type !== "adhan-prayer") return;
+        playAdhanAudio(url, `${ex.prayerName ?? "Azon"} azoni`, loop);
+      },
+    );
+    recvP.catch((err) => {
+      console.warn("[adhan-native] listener failed", err);
+    });
+    actP.catch((err) => {
+      console.warn("[adhan-native] listener failed", err);
+    });
 
     return () => {
-      void recvHandle?.remove();
-      void actHandle?.remove();
+      void recvP.then((h) => h.remove()).catch(() => undefined);
+      void actP.then((h) => h.remove()).catch(() => undefined);
     };
   }, [
     settings.notifications.adhanEnabled,

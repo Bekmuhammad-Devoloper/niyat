@@ -70,6 +70,12 @@ export function useLocationSync() {
   const { settings, update } = useSettings();
   const enabled = !!settings.location;
   const lastSentRef = useRef<{ lat: number; lon: number; at: number } | null>(null);
+  // Heartbeat intervali eng so'nggi joylashuvni o'qishi uchun ref — closure
+  // ichidagi settings.location eskirib qolmasin.
+  const locRef = useRef(settings.location);
+  useEffect(() => {
+    locRef.current = settings.location;
+  }, [settings.location]);
 
   const pushLocation = useCallback(
     (lat: number, lon: number, accuracy: number | null) => {
@@ -236,7 +242,7 @@ export function useLocationSync() {
     pushLocation(loc.latitude, loc.longitude, null);
 
     const id = window.setInterval(() => {
-      const cur = settings.location;
+      const cur = locRef.current;
       if (!cur) return;
       pushLocation(cur.latitude, cur.longitude, null);
     }, HEARTBEAT_MS);

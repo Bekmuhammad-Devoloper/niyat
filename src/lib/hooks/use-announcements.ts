@@ -40,12 +40,12 @@ export function useAnnouncementsPublic() {
 
   const markRead = (id: string) => {
     if (readSet.has(id)) return;
-    setReadIds([...readIds, id]);
+    setReadIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   };
 
   const markAllRead = () => {
     const allIds = announcements.map((a) => a.id);
-    setReadIds([...new Set([...readIds, ...allIds])]);
+    setReadIds((prev) => [...new Set([...prev, ...allIds])]);
   };
 
   return {

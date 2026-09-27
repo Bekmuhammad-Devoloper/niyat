@@ -39,6 +39,12 @@ export function useWhisperStt(opts: {
   const speechStartedAtRef = useRef<number>(0);
   const lastVoiceAtRef = useRef<number>(0);
   const isRecordingRef = useRef(false);
+  // stop()/unmount'dan keyin in-flight MediaRecorder.onstop transcribe/
+  // onTranscript chaqirmasligi uchun
+  const cancelledRef = useRef(false);
+  // transcribe ref orqali — startRecording'ni har transcribe o'zgarishida
+  // qayta yaratmaslik uchun (transcribe pastda e'lon qilinadi)
+  const transcribeRef = useRef<(blob: Blob) => Promise<void>>(async () => undefined);
 
   // Yozishni boshlash — gapirish aniqlanganda
   const startRecording = useCallback(() => {
@@ -58,12 +64,14 @@ export function useWhisperStt(opts: {
         });
         chunksRef.current = [];
         isRecordingRef.current = false;
+        // To'xtatilgan/unmount bo'lgan — natijani tashlab yuboramiz
+        if (cancelledRef.current) return;
         if (duration < MIN_SPEECH_DURATION_MS || blob.size < 1500) {
           // Juda qisqa — jim qayta tinglashga qaytamiz
           setState("listening");
           return;
         }
-        void transcribe(blob);
+        void transcribeRef.current(blob);
       };
       rec.start(250);
       recorderRef.current = rec;
@@ -109,10 +117,12 @@ export function useWhisperStt(opts: {
         }
         const data = (await res.json()) as { text: string };
         const text = (data.text ?? "").trim();
+        if (cancelledRef.current) return;
         if (text) onTranscript(text);
         setState("listening");
       } catch (err) {
         console.warn("[whisper-stt] transcribe failed", err);
+        if (cancelledRef.current) return;
         const msg = err instanceof Error ? err.message : "STT xato";
         setErrorMsg(msg);
         onError?.(msg);
@@ -121,6 +131,10 @@ export function useWhisperStt(opts: {
     },
     [onTranscript, onError],
   );
+
+  useEffect(() => {
+    transcribeRef.current = transcribe;
+  }, [transcribe]);
 
   // Audio darajasini doimiy o'qib, gapirish boshini va silence'ni aniqlash
   const tickAudio = useCallback(() => {
@@ -206,6 +220,7 @@ export function useWhisperStt(opts: {
     };
 
     const start = async () => {
+      cancelledRef.current = false;
       if (!navigator.mediaDevices?.getUserMedia) {
         setState("error");
         setErrorMsg("Mikrofon bu qurilmada qo'llanmaydi");
@@ -249,6 +264,7 @@ export function useWhisperStt(opts: {
 
     const stop = () => {
       cancelled = true;
+      cancelledRef.current = true;
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = null;

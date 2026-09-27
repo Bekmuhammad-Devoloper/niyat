@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocalState } from "@/lib/use-local-state";
 
 // Ekran vaqti — kunlik. Manbalar:
@@ -36,8 +36,10 @@ const EMPTY_PER_SCREEN: Record<ScreenKey, number> = {
   me: 0,
 };
 
+// date: bo'sh — haqiqiy kun kaliti effect ichida hisoblanadi (modul yuklanish
+// vaqtidagi sana yarim tunda eskirib qoladi).
 const DEFAULT: AppTimeState = {
-  date: todayKey(),
+  date: "",
   todayMin: 0,
   yesterdayMin: 0,
   manualMin: null,
@@ -48,17 +50,54 @@ const DEFAULT: AppTimeState = {
   activeScreen: null,
 };
 
+// Vaqt hisoblash — SINGLETON. useAppTime() bir nechta joyda (NiyatApp,
+// HomeScreen, ScreenTimeSheet) chaqiriladi; har biri o'z intervalini yursa,
+// delta N marta qo'shilib ketadi. Faqat bitta "egasi" bo'lgan instansiya
+// interval/visibility hisobini yuritadi, qolganlari faqat state'ni o'qiydi.
+let trackerOwner: symbol | null = null;
+// Egasi unmount bo'lganda (masalan, child ekran yopilganda) qolgan mount
+// bo'lgan instansiyalardan biri egalikni qayta olishi uchun — ularga signal.
+const trackerWaiters = new Set<() => void>();
+function releaseTracker(id: symbol): void {
+  if (trackerOwner !== id) return;
+  trackerOwner = null;
+  trackerWaiters.forEach((fn) => fn());
+}
+
 export function useAppTime() {
-  const [state, setState] = useLocalState<AppTimeState>("niyat:appTime", DEFAULT);
+  const [stored, setState, hydrated] = useLocalState<AppTimeState>(
+    "niyat:appTime",
+    DEFAULT,
+  );
+  // Eski install'larda perScreen/yesterdayPerScreen bo'lmasligi mumkin —
+  // default bilan birlashtiramiz, crash bo'lmasin.
+  const state = useMemo<AppTimeState>(
+    () => ({
+      ...DEFAULT,
+      ...stored,
+      perScreen: stored.perScreen ?? { ...EMPTY_PER_SCREEN },
+      yesterdayPerScreen: stored.yesterdayPerScreen ?? { ...EMPTY_PER_SCREEN },
+    }),
+    [stored],
+  );
   // Tick state — UI'ni har 30s da yangilash uchun
   const [, setTick] = useState(0);
+  // Har bir instansiya uchun noyob identifikator — tracker egasini aniqlash uchun
+  const idRef = useRef(Symbol("appTime"));
+  // Egasi bo'shaganda qayta urinish uchun tick
+  const [claimTick, setClaimTick] = useState(0);
 
+  // Yangi kun boshlanganmi? — manual lock va per-screen ham yangilanadi.
+  // Faqat localStorage o'qilgandan keyin (hydrated) — aks holda DEFAULT
+  // asosida saqlangan ma'lumot ustiga yozib yuboramiz.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    // Yangi kun boshlanganmi? — manual lock va per-screen ham yangilanadi
+    if (!hydrated) return;
     const today = todayKey();
-    if (state.date !== today) {
-      setState((prev) => ({
+    if (state.date === today) return;
+    setState((prev) => {
+      if (prev.date === today) return prev;
+      return {
         date: today,
         todayMin: 0,
         yesterdayMin: prev.todayMin,
@@ -66,9 +105,28 @@ export function useAppTime() {
         manualLockedAt: null,
         yesterdayManualMin: prev.manualMin,
         perScreen: { ...EMPTY_PER_SCREEN },
-        yesterdayPerScreen: prev.perScreen,
-        activeScreen: prev.activeScreen,
-      }));
+        yesterdayPerScreen: prev.perScreen ?? { ...EMPTY_PER_SCREEN },
+        activeScreen: prev.activeScreen ?? null,
+      };
+    });
+    // setState ataylab deps'ga qo'shilmaydi — infinite loop'ni oldini olish
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.date, hydrated]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!hydrated) return;
+    // Singleton: egasi bo'lmasa — shu instansiya egasi bo'ladi. Boshqa
+    // instansiya egasi bo'lsa — kutamiz (faqat o'qiymiz); egasi bo'shasa
+    // claimTick orqali qayta urinamiz.
+    const myId = idRef.current;
+    if (trackerOwner === null) trackerOwner = myId;
+    if (trackerOwner !== myId) {
+      const retry = () => setClaimTick((t) => t + 1);
+      trackerWaiters.add(retry);
+      return () => {
+        trackerWaiters.delete(retry);
+      };
     }
 
     let lastTick = Date.now();
@@ -96,18 +154,18 @@ export function useAppTime() {
               perScreen: prev.activeScreen
                 ? { ...EMPTY_PER_SCREEN, [prev.activeScreen]: deltaMin }
                 : { ...EMPTY_PER_SCREEN },
-              yesterdayPerScreen: prev.perScreen,
-              activeScreen: prev.activeScreen,
+              yesterdayPerScreen: prev.perScreen ?? { ...EMPTY_PER_SCREEN },
+              activeScreen: prev.activeScreen ?? null,
             };
           }
-          const nextPerScreen = { ...prev.perScreen };
+          const nextPerScreen = { ...EMPTY_PER_SCREEN, ...(prev.perScreen ?? {}) };
           if (prev.activeScreen) {
             nextPerScreen[prev.activeScreen] =
               (nextPerScreen[prev.activeScreen] ?? 0) + deltaMin;
           }
           return {
             ...prev,
-            todayMin: prev.todayMin + deltaMin,
+            todayMin: (prev.todayMin ?? 0) + deltaMin,
             perScreen: nextPerScreen,
           };
         });
@@ -123,10 +181,12 @@ export function useAppTime() {
     return () => {
       window.clearInterval(id);
       document.removeEventListener("visibilitychange", onVisibility);
+      // Egalikni bo'shatamiz — kutayotgan instansiyalardan biri oladi
+      releaseTracker(myId);
     };
     // setState ataylab deps'ga qo'shilmaydi — infinite loop'ni oldini olish
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.date]);
+  }, [hydrated, claimTick]);
 
   // Manual qiymat — ustun. Bo'lmasa auto qiymat.
   const isManual = state.manualMin !== null;

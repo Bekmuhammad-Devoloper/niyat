@@ -15,18 +15,45 @@ function ensureDir(path: string): void {
   if (!existsSync(path)) mkdirSync(path, { recursive: true });
 }
 
+// SQL faylni alohida statement'larga bo'lish: avval har qatordan `--` izohni
+// olib tashlaymiz, keyin `;` (ortidan bo'sh joy/EOF) bo'yicha ajratamiz.
+function splitSqlStatements(sql: string): string[] {
+  const stripped = sql
+    .split(/\r?\n/)
+    .map((line) => line.replace(/--.*$/, ""))
+    .join("\n");
+  return stripped
+    .split(/;(?=\s|$)/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 function applyMigrations(db: Database.Database, migrationsDir: string): void {
   if (!existsSync(migrationsDir)) return;
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".sql"))
     .sort();
-  // Migrations'ni har safar idempotent qo'llaymiz (CREATE IF NOT EXISTS bor)
+  // Migrations'ni har safar idempotent qo'llaymiz (CREATE IF NOT EXISTS bor).
+  // Har statement alohida exec qilinadi — bitta ALTER TABLE ... ADD COLUMN
+  // (qayta ishga tushganda "duplicate column") fayl qolganini to'xtatmasin.
   for (const file of files) {
+    let sql: string;
     try {
-      const sql = readFileSync(join(migrationsDir, file), "utf8");
-      db.exec(sql);
+      sql = readFileSync(join(migrationsDir, file), "utf8");
     } catch (err) {
-      console.warn(`[dev-d1] migration ${file} failed:`, err);
+      console.warn(`[dev-d1] migration ${file} o'qilmadi:`, err);
+      continue;
+    }
+    for (const statement of splitSqlStatements(sql)) {
+      try {
+        db.exec(statement);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        // Qayta ishga tushganda kutilgan xatolar — jim o'tamiz
+        if (!/duplicate column|already exists/i.test(msg)) {
+          console.warn(`[dev-d1] migration ${file} statement failed:`, msg);
+        }
+      }
     }
   }
 }

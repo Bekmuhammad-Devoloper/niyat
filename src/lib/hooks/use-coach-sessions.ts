@@ -28,8 +28,15 @@ function makeId(): string {
   return `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// Seed (namuna) xabarlar — har yangi sessiya shular bilan boshlanadi.
+// Sarlavha uchun ularni hisobga olmaymiz, aks holda barcha suhbatlar bir xil
+// "Zerikkan edim..." sarlavhasini oladi.
+const SEED_MESSAGE_IDS = new Set(initialCoachMessages.map((m) => m.id));
+
 function deriveTitle(messages: CoachMessage[]): string {
-  const firstUser = messages.find((m) => m.from === "user");
+  const firstUser = messages.find(
+    (m) => m.from === "user" && !SEED_MESSAGE_IDS.has(m.id),
+  );
   if (!firstUser) return "Yangi suhbat";
   const txt = firstUser.text.trim().replace(/\s+/g, " ");
   if (txt.length <= MAX_TITLE_LEN) return txt;
@@ -71,7 +78,7 @@ function migrateLegacyMessages(): ChatSession | null {
 }
 
 export function useCoachSessions() {
-  const [sessions, setSessions] = useLocalState<ChatSession[]>(
+  const [sessions, setSessions, hydrated] = useLocalState<ChatSession[]>(
     "niyat:coach:sessions",
     [],
   );
@@ -83,9 +90,12 @@ export function useCoachSessions() {
 
   // Birinchi marta yuklashda: eski xabarlarni ko'chirish + bo'sh bo'lsa,
   // yangi sessiya yaratish.
+  // MUHIM: faqat localStorage o'qilib bo'lgach (hydrated). Aks holda birinchi
+  // render'dagi bo'sh [] asosida saqlangan suhbatlar ustiga yozib yuboriladi.
   useEffect(() => {
     if (migratedRef.current) return;
     if (typeof window === "undefined") return;
+    if (!hydrated) return;
     if (sessions.length > 0) {
       migratedRef.current = true;
       // Eski xabarlar hali ham bo'lsa, tozalab tashlaymiz (bir marta).
@@ -99,8 +109,10 @@ export function useCoachSessions() {
     migratedRef.current = true;
     const legacy = migrateLegacyMessages();
     if (legacy) {
-      setSessions([legacy]);
-      setActiveId(legacy.id);
+      // Funksional update — agar shu orada boshqa instansiya allaqachon
+      // sessiya yaratgan bo'lsa, uni bekor qilmaymiz.
+      setSessions((prev) => (prev.length > 0 ? prev : [legacy]));
+      setActiveId((prev) => prev || legacy.id);
       try {
         window.localStorage.removeItem("niyat:coach:messages");
       } catch {
@@ -109,9 +121,9 @@ export function useCoachSessions() {
       return;
     }
     const fresh = makeFreshSession();
-    setSessions([fresh]);
-    setActiveId(fresh.id);
-  }, [sessions.length, setSessions, setActiveId]);
+    setSessions((prev) => (prev.length > 0 ? prev : [fresh]));
+    setActiveId((prev) => prev || fresh.id);
+  }, [hydrated, sessions.length, setSessions, setActiveId]);
 
   const activeSession = useMemo<ChatSession | null>(() => {
     if (sessions.length === 0) return null;

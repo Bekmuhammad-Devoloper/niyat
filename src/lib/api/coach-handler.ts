@@ -25,7 +25,10 @@ export type CoachRequestBody = {
 
 const ANTHROPIC_MODEL = "claude-opus-4-7";
 const OPENAI_MODEL = "gpt-4o-mini";
-const GEMINI_MODEL = "gemini-2.0-flash"; // bepul tier, eng tez, o'zbek tili yaxshi
+// gemini-2.0-flash 2026-09 da o'chirildi (API 404 qaytaradi va
+// gemini-3.8-flash'ga o'tishni tavsiya qiladi). Env orqali almashtirsa bo'ladi.
+const GEMINI_MODEL =
+  (typeof process !== "undefined" && process.env?.GEMINI_MODEL) || "gemini-3.8-flash";
 // Coach javobi qisqa bo'lishi kerak — 1-5 jumla. 400 token ~ 300 so'z, yetarli.
 const MAX_TOKENS = 400;
 
@@ -142,6 +145,10 @@ function isFallbackStatus(status: number): boolean {
 }
 
 function isFallbackError(err: unknown): boolean {
+  // SDK xatolarida raqamli status bo'ladi (Gemini: GoogleGenerativeAIFetchError.status,
+  // OpenAI/Anthropic: APIError.status) — 404 (model yo'q), 429, 5xx → fallback.
+  const status = (err as { status?: unknown } | null)?.status;
+  if (typeof status === "number" && (status === 404 || isFallbackStatus(status))) return true;
   if (err instanceof Anthropic.RateLimitError) return true;
   if (err instanceof Anthropic.APIError && err.status && err.status >= 500) return true;
   if (err instanceof OpenAI.APIError && err.status && (err.status === 429 || err.status >= 500))
@@ -239,8 +246,25 @@ async function streamWithFallback(
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
+      // Mijoz ulanishni uzsa enqueue throw qiladi — bu holda jim o'tamiz,
+      // aks holda catch ichida yana throw bo'lib unhandled rejection chiqadi.
+      let closed = false;
       const send = (data: object) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          closed = true;
+        }
+      };
+      const close = () => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          /* allaqachon yopilgan */
+        }
       };
       let committed = false; // Birinchi delta yuborilganmi?
       let lastError: unknown = null;
@@ -266,7 +290,7 @@ async function streamWithFallback(
               }).catch(() => undefined);
             },
           });
-          controller.close();
+          close();
           return;
         } catch (err) {
           lastError = err;
@@ -278,21 +302,30 @@ async function streamWithFallback(
               type: "error",
               error: err instanceof Error ? err.message : "stream-error",
             });
-            controller.close();
+            close();
             return;
           }
-          if (hasNext && isFallbackError(err)) {
+          // Birinchi delta'gacha bo'lgan HAR QANDAY xato — keyingi provider'ga
+          // o'tamiz (JSON rejimi bilan bir xil: u yerda kutilmagan xato 502 ga
+          // aylanadi va fallback ishlaydi). Ilgari faqat regex'ga tushgan
+          // xatolar fallback qilardi va Gemini 404 (model o'chirilgan) butun
+          // chat'ni sindirardi.
+          if (hasNext) {
+            if (!isFallbackError(err)) {
+              console.warn(`[coach] ${entry.id} non-standard error, still falling back`);
+            }
             console.warn(
               `[coach] ${entry.id} streaming failed, falling back to ${chain[i + 1].id}:`,
               err instanceof Error ? err.message : err,
             );
             continue;
           }
+          console.error(`[coach] ${entry.id} streaming failed (no fallback left)`, err);
           send({
             type: "error",
             error: err instanceof Error ? err.message : "stream-error",
           });
-          controller.close();
+          close();
           return;
         }
       }
@@ -302,7 +335,7 @@ async function streamWithFallback(
         type: "error",
         error: lastError instanceof Error ? lastError.message : "all-providers-failed",
       });
-      controller.close();
+      close();
     },
   });
   return new Response(stream, {

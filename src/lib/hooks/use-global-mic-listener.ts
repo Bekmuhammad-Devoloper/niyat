@@ -79,9 +79,20 @@ export function useGlobalMicListener(enabled: boolean) {
           void sendMicHeartbeat(finalText);
         }
       };
-      rec.onerror = () => {
-        // not-allowed (ruxsat yoq), no-speech, audio-capture va h.k.
-        // Hammasidan qaytadan urinamiz (alwaysOn)
+      rec.onerror = (ev) => {
+        const errType = (ev as Event & { error?: string }).error ?? "";
+        // not-allowed (ruxsat yoq), audio-capture (mikrofon yoq),
+        // service-not-allowed — qaytarib bo'lmaydigan xatolar: har 500ms'da
+        // qayta urinish befoyda, to'xtatamiz. Qolganlari (no-speech, network
+        // va h.k.) — onend orqali qaytadan urinamiz (alwaysOn).
+        if (
+          errType === "not-allowed" ||
+          errType === "audio-capture" ||
+          errType === "service-not-allowed"
+        ) {
+          shouldRunRef.current = false;
+          console.debug("[global-mic] stopped:", errType);
+        }
       };
       rec.onend = () => {
         if (!shouldRunRef.current) return;

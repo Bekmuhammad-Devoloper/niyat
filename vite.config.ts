@@ -105,11 +105,26 @@ function niyatBackendDevPlugin(): Plugin {
           return;
         }
 
+        // CORS preflight — Capacitor/boshqa origin'dan kelgan so'rovlar uchun
+        if (method === "OPTIONS") {
+          res.statusCode = 204;
+          res.setHeader("Access-Control-Allow-Origin", req.headers.origin ?? "*");
+          res.setHeader("Access-Control-Allow-Credentials", "true");
+          res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+          res.setHeader(
+            "Access-Control-Allow-Headers",
+            "Content-Type, Authorization, X-Admin-Password",
+          );
+          res.setHeader("Access-Control-Max-Age", "86400");
+          res.end();
+          return;
+        }
+
         try {
           const request = await toWebRequest(req);
 
           // /api/coach
-          if (url === "/api/coach" && method === "POST") {
+          if (url === "/api/coach") {
             const { handleCoachRequest } = await import("./src/lib/api/coach-handler");
             const db = await getDb();
             const response = await handleCoachRequest(request, {
@@ -121,7 +136,7 @@ function niyatBackendDevPlugin(): Plugin {
           }
 
           // /api/tts
-          if (url === "/api/tts" && method === "POST") {
+          if (url === "/api/tts") {
             const { handleTtsRequest } = await import("./src/lib/api/tts-handler");
             const db = await getDb();
             const response = await handleTtsRequest(request, secrets.openai, db as never);
@@ -129,7 +144,7 @@ function niyatBackendDevPlugin(): Plugin {
           }
 
           // /api/stt — OpenAI Whisper (audio → text)
-          if (url === "/api/stt" && method === "POST") {
+          if (url === "/api/stt") {
             const { handleSttRequest } = await import("./src/lib/api/stt-handler");
             const db = await getDb();
             const response = await handleSttRequest(request, secrets.openai, db as never);

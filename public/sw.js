@@ -14,7 +14,33 @@ self.addEventListener("activate", (event) => {
 
 // Push xabar kelganda
 self.addEventListener("push", (event) => {
-  if (!event.data) return;
+  // Server bo'sh payload yuboradi (Content-Length: 0) — kontentni
+  // /api/announcements'dan o'zimiz tortib olamiz.
+  if (!event.data) {
+    event.waitUntil(
+      fetch("/api/announcements")
+        .then((r) => r.json())
+        .then((d) => {
+          const a = d?.announcements?.[0];
+          return self.registration.showNotification(a?.title || "Niyat", {
+            body: a?.body || "Yangi e'lon",
+            icon: "/yuksalish.logo.png",
+            badge: "/yuksalish.logo.png",
+            tag: a?.id ? "ann-" + a.id : "niyat-push",
+            data: { url: "/" },
+            vibrate: [200, 100, 200],
+          });
+        })
+        .catch(() =>
+          self.registration.showNotification("Niyat", {
+            body: "Yangi e'lon bor",
+            icon: "/yuksalish.logo.png",
+            data: { url: "/" },
+          }),
+        ),
+    );
+    return;
+  }
 
   let payload;
   try {

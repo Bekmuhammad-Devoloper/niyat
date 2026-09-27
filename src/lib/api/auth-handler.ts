@@ -69,6 +69,12 @@ async function handleRegister(request: Request, db: D1Database): Promise<Respons
   if (firstName.length < 2 || firstName.length > 50) {
     return jsonResponse({ error: "Ism 2-50 belgi bo'lishi kerak" }, { status: 400 });
   }
+  if (lastName.length > 50) {
+    return jsonResponse(
+      { error: "Familiya 50 belgidan oshmasligi kerak" },
+      { status: 400 },
+    );
+  }
   if (password.length < 6) {
     return jsonResponse(
       { error: "Parol kamida 6 belgi bo'lishi kerak" },
@@ -92,15 +98,27 @@ async function handleRegister(request: Request, db: D1Database): Promise<Respons
   const passwordHash = await sha256Hex(password);
   const now = Date.now();
 
-  await db
-    .prepare(
-      `INSERT INTO users
-        (id, phone, first_name, last_name, password_hash, is_premium,
-         premium_expires_at, created_at, updated_at, last_active_at)
-       VALUES (?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
-    )
-    .bind(id, phone, firstName, lastName, passwordHash, now, now, now)
-    .run();
+  try {
+    await db
+      .prepare(
+        `INSERT INTO users
+          (id, phone, first_name, last_name, password_hash, is_premium,
+           premium_expires_at, created_at, updated_at, last_active_at)
+         VALUES (?, ?, ?, ?, ?, 0, NULL, ?, ?, ?)`,
+      )
+      .bind(id, phone, firstName, lastName, passwordHash, now, now, now)
+      .run();
+  } catch (err) {
+    // Race: SELECT va INSERT orasida boshqa so'rov shu raqamni yaratgan bo'lishi mumkin
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/UNIQUE|constraint/i.test(msg)) {
+      return jsonResponse(
+        { error: "Bu telefon raqam bilan hisob mavjud" },
+        { status: 409 },
+      );
+    }
+    throw err;
+  }
 
   const token = await createSession(db, id);
   const row = await db

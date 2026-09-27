@@ -799,7 +799,7 @@ function GoalCard({
               )}
               {showOriginScope && (
                 <span className="uppercase tracking-wider text-tertiary">
-                  · {goal.scope === "weekly" ? "Haftalik" : goal.scope}
+                  · {SCOPE_LABEL[goal.scope]}
                 </span>
               )}
             </div>

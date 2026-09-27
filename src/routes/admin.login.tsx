@@ -13,7 +13,7 @@ export const Route = createFileRoute("/admin/login")({
 });
 
 function AdminLoginPage() {
-  const { isAuthenticated, login } = useAdminAuth();
+  const { isAuthenticated, hydrated, login } = useAdminAuth();
   const navigate = useNavigate();
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
@@ -21,23 +21,28 @@ function AdminLoginPage() {
 
   // Allaqachon kirgan bo'lsa — dashboard'ga yo'naltir
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate({ to: "/admin" });
+    if (hydrated && isAuthenticated) {
+      navigate({ to: "/admin", replace: true });
     }
-  }, [isAuthenticated, navigate]);
+  }, [hydrated, isAuthenticated, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password) return;
+    if (!password || submitting) return;
     setSubmitting(true);
-    const ok = login(password);
-    setSubmitting(false);
-    if (ok) {
-      toast.success("Admin panelga kirildi");
-      await navigate({ to: "/admin" });
-    } else {
-      toast.error("Parol noto'g'ri");
-      setPassword("");
+    try {
+      const ok = await login(password);
+      if (ok) {
+        toast.success("Admin panelga kirildi");
+        await navigate({ to: "/admin" });
+      } else {
+        toast.error("Parol noto'g'ri");
+        setPassword("");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Server bilan aloqa yo'q");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -88,7 +93,8 @@ function AdminLoginPage() {
         </form>
 
         <p className="mt-6 text-center text-[11px] text-tertiary">
-          Parol .env'da <code className="text-primary">VITE_ADMIN_PASSWORD</code> sozlanadi
+          Parol server'da <code className="text-primary">ADMIN_PASSWORD</code> secret
+          sifatida sozlanadi
         </p>
       </div>
       <Toaster

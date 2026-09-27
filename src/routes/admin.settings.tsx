@@ -23,9 +23,10 @@ function AdminSettingsPage() {
           </h2>
         </div>
         <p className="text-[12px] text-muted-foreground leading-relaxed">
-          Admin paroli <code className="text-primary">.env</code> faylida
-          <code className="text-primary ml-1">VITE_ADMIN_PASSWORD</code> orqali
-          sozlanadi. Production'da bu kalit JWT bilan almashtirilishi kerak.
+          Admin paroli server tomonda <code className="text-primary">ADMIN_PASSWORD</code>
+          secret orqali sozlanadi (Cloudflare: <code className="text-primary">wrangler secret put</code>,
+          GCE: <code className="text-primary">.env</code>). Parol brauzerga yuborilmaydi — har
+          so'rovda server tekshiradi.
         </p>
       </section>
 

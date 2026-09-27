@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
 import { PhoneFrame } from "./PhoneFrame";
 import { StatusBar } from "./StatusBar";
@@ -6,6 +6,7 @@ import { TabBar } from "./TabBar";
 import { TabKey } from "./types";
 import { Onboarding } from "./Onboarding";
 import { LoginScreen } from "./LoginScreen";
+import { NiyatLogo } from "./Logo";
 import { AudioMiniPlayer } from "./AudioMiniPlayer";
 import { HomeScreen } from "./screens/HomeScreen";
 import { CoachScreen } from "./screens/CoachScreen";
@@ -13,7 +14,7 @@ import { GoalsScreen } from "./screens/GoalsScreen";
 import { WorshipScreen } from "./screens/WorshipScreen";
 import { MeScreen } from "./screens/MeScreen";
 import { hashPassword, useUserProfile } from "@/lib/hooks/use-user-profile";
-import { useAuthApi, isAuthError } from "@/lib/hooks/use-auth-api";
+import { useAuthApi, isAuthError, setAuthToken } from "@/lib/hooks/use-auth-api";
 import { useNotifications } from "@/lib/hooks/use-notifications";
 import { useLevelRewards } from "@/lib/hooks/use-level-rewards";
 import { useGoalReminders } from "@/lib/hooks/use-goal-reminders";
@@ -44,11 +45,24 @@ const SCREEN_REGISTRY: Record<TabKey, React.ComponentType<{ onOpenVoice?: () => 
 const TAB_ORDER: TabKey[] = ["home", "goals", "coach", "worship", "me"];
 
 export function NiyatApp() {
-  const { profile, setProfile } = useUserProfile();
+  const { profile, setProfile, hydrated } = useUserProfile();
   const auth = useAuthApi();
   // Joylashuv hook'i — onboarding paytida `geo.request()` faqat tugab
   // bo'lganda chaqiriladi, mount'da hech narsa so'ralmaydi.
   const geo = useGeolocation();
+
+  // localStorage hali o'qilmagan — profil DEFAULT (onboarded=false). Shu
+  // paytda Onboarding'ni ko'rsatsak, har ishga tushirishda forma "yalt" etib
+  // ko'rinadi. Neytral splash — SSR'da ham shu render bo'ladi (deterministik).
+  if (!hydrated) {
+    return (
+      <PhoneFrame>
+        <div className="flex-1 min-h-0 bg-background flex items-center justify-center">
+          <NiyatLogo size={64} rounded={18} />
+        </div>
+      </PhoneFrame>
+    );
+  }
 
   // Auth marshrutlash:
   //   1. !onboarded → Onboarding (ro'yxatdan o'tish)
@@ -65,6 +79,12 @@ export function NiyatApp() {
               // 1) AVVAL backend'ga ro'yxatdan o'tkazamiz — agar xato bo'lsa,
               // foydalanuvchi shu yerda qoladi va qaytadan urinishi mumkin.
               // Bu "markaziy serverga bog'lanmagan" muammosini oldini oladi.
+              //
+              // localOnly — "Parolni unutdim" oqimi: telefon serverda band (409)
+              // va yangi parol server parolga mos kelmadi (401). Foydalanuvchini
+              // qamab qo'ymaymiz — hisob faqat shu qurilmada ishlaydi, keyinroq
+              // Profil'dan to'g'ri parol bilan qayta kiradi.
+              let localOnly = false;
               try {
                 await auth.register({ firstName, lastName, phone, password });
               } catch (err) {
@@ -73,11 +93,15 @@ export function NiyatApp() {
                     // Telefon raqami band — login bilan urinish
                     try {
                       await auth.login({ phone, password });
-                    } catch {
-                      toast.error(
-                        "Bu telefon raqam allaqachon ishlatilgan. Parol notog'ri.",
-                      );
-                      return; // Onboarding tugamaydi
+                    } catch (loginErr) {
+                      if (isAuthError(loginErr) && loginErr.status === 401) {
+                        localOnly = true;
+                      } else {
+                        toast.error(
+                          "Bu telefon raqam allaqachon ishlatilgan. Parol notog'ri.",
+                        );
+                        return; // Onboarding tugamaydi
+                      }
                     }
                   } else if (err.backendDown) {
                     toast.error(
@@ -103,7 +127,7 @@ export function NiyatApp() {
                 }
               }
 
-              // 2) Backend OK — endi lokal profilni saqlaymiz
+              // 2) Backend OK (yoki localOnly) — endi lokal profilni saqlaymiz
               const passwordHash = await hashPassword(password);
               setProfile({
                 firstName,
@@ -116,6 +140,13 @@ export function NiyatApp() {
                 loggedIn: true,
                 locationLocked: true,
               });
+              if (localOnly) {
+                // Eski token yangi parolga tegishli emas — tozalaymiz
+                setAuthToken(null);
+                toast.warning(
+                  "Server paroli mos kelmadi — hisob faqat shu qurilmada ishlaydi. Keyinroq Profil'dan qayta kiring.",
+                );
+              }
               if (niyat) seedFirstNiyat(niyat);
 
               // 3) Joylashuv ruxsati endi onboarding paytida so'ralmaydi —
@@ -214,6 +245,16 @@ function MainAppInner({
   // ochilganda avtomatik so'rab olamiz (faqat agar hali sozlanmagan bo'lsa).
   const geoAuto = useGeolocation();
   useEffect(() => {
+    // Birinchi render'da `geoAuto.location` hali localStorage'dan o'qilmagan
+    // (doim null) — shuning uchun saqlangan sozlamani to'g'ridan-to'g'ri
+    // o'qiymiz. Aks holda har ishga tushirishda qayta so'rab, saqlangan
+    // joylashuvni ustidan yozib yuboradi.
+    try {
+      const s = JSON.parse(localStorage.getItem("niyat:settings") ?? "null");
+      if (s?.location) return;
+    } catch {
+      /* ignore */
+    }
     if (geoAuto.location) return; // allaqachon bor — qayta so'ramaymiz
     if (geoAuto.status === "requesting") return;
     // Telefonda APK ishlasa, ruxsat dialogi chiqadi va shu user'ga 1 marta ko'rsatiladi.
@@ -265,13 +306,14 @@ function MainAppInner({
   // Foydalanuvchi "Niyat" desa, ovozli muloqot rejimi avtomatik ochiladi.
   // Native (APK): BackgroundMic foreground service ishlasagina ishlaydi.
   // Web: brauzer mikrofonidan tinglaydi (foydalanuvchi ruxsat bergan bo'lsa).
+  const onWake = useCallback((source: "native" | "web", text: string) => {
+    console.log(`[wake-word] uyg'otildi (${source}):`, text);
+    setVoiceModeOpen(true);
+  }, []);
   useWakeWord({
     enabled: micSettings.voice.wakeWordEnabled,
     voiceModeOpen,
-    onWake: (source, text) => {
-      console.log(`[wake-word] uyg'otildi (${source}):`, text);
-      setVoiceModeOpen(true);
-    },
+    onWake,
   });
 
   // FAB bosilganda voice mode'ni ochish. Coordinator orqali mikrofonni

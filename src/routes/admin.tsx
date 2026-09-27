@@ -12,18 +12,21 @@ export const Route = createFileRoute("/admin")({
 });
 
 function AdminGate() {
-  const { isAuthenticated } = useAdminAuth();
+  const { isAuthenticated, hydrated } = useAdminAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
   // /admin/login — auth gate'dan tashqari (chunki shu yerda kirayapti)
   const isLoginPage = location.pathname === "/admin/login";
 
+  // Faqat hydration'dan keyin — SSR snapshot'da sessiya har doim null, shu
+  // sababli ilgari kirgan admin sahifani yangilasa login'ga, keyin /admin'ga
+  // "sakrab" ketardi va deep link yo'qolardi.
   useEffect(() => {
-    if (!isAuthenticated && !isLoginPage) {
-      navigate({ to: "/admin/login" });
+    if (hydrated && !isAuthenticated && !isLoginPage) {
+      navigate({ to: "/admin/login", replace: true });
     }
-  }, [isAuthenticated, isLoginPage, navigate]);
+  }, [hydrated, isAuthenticated, isLoginPage, navigate]);
 
   // Login sahifasi — AdminLayout'siz, to'g'ridan-to'g'ri render
   if (isLoginPage) {

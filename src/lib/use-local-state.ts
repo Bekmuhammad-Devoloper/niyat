@@ -13,17 +13,47 @@ function notify(key: string, raw: string | null, exclude?: Listener) {
   });
 }
 
+// localStorage'ga hook'dan tashqarida yozish (masalan, serverdan profil
+// tiklashda). Yozadi VA shu key bilan mount bo'lgan barcha useLocalState
+// instansiyalarini darhol yangilaydi — sahifani reload qilish shart emas.
+export function writeLocalState<T>(key: string, value: T): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = JSON.stringify(value);
+    window.localStorage.setItem(key, raw);
+    notify(key, raw);
+  } catch (err) {
+    console.warn(`writeLocalState: write failed for "${key}"`, err);
+  }
+}
+
+// Hook'dan tashqarida o'qish — migratsiya effektlari uchun. Xom (raw) qiymat
+// null bo'lsa — hech qachon saqlanmagan.
+export function readLocalStateRaw(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
 // SSR-safe localStorage state.
 // - Birinchi render ham serverda, ham clientda defaultValue qaytaradi —
 //   hydration mismatch'ni oldini olish uchun.
 // - Mount'dan keyin useEffect ichida localStorage'dan haqiqiy qiymat o'qiladi.
 // - Bir tab ichida bir xil key bilan ishlatilgan instansiyalar avtomatik sinxron.
 // - Boshqa tablar'dan kelgan o'zgarish ham `storage` event orqali kuzatiladi.
+// - Uchinchi qaytariladigan qiymat `hydrated` — localStorage o'qilib bo'lgach
+//   true bo'ladi. Migratsiya/seed effektlari SHU FLAG'ni kutishi shart, aks
+//   holda birinchi render'dagi defaultValue asosida saqlangan ma'lumot ustiga
+//   yozib yuboradi (ma'lumot yo'qolishi).
 export function useLocalState<T>(key: string, defaultValue: T) {
   // Birinchi render har doim defaultValue — bu SSR HTML bilan mos keladi.
   // localStorage'dan o'qish faqat client'da mount'dan keyin sodir bo'ladi
   // (pastdagi useEffect'da).
   const [value, setValue] = useState<T>(defaultValue);
+  const [isHydrated, setIsHydrated] = useState(false);
   const hydrated = useRef(false);
   const localListenerRef = useRef<Listener | null>(null);
 
@@ -40,6 +70,9 @@ export function useLocalState<T>(key: string, defaultValue: T) {
     } catch (err) {
       console.warn(`useLocalState: read failed for "${key}"`, err);
     }
+    // setValue bilan bir batch'da — consumer'lar hydrated=true ni faqat
+    // haqiqiy qiymat bilan birga ko'radi.
+    setIsHydrated(true);
 
     const listener: Listener = (raw) => {
       if (raw === null) {
@@ -100,5 +133,5 @@ export function useLocalState<T>(key: string, defaultValue: T) {
     [key],
   );
 
-  return [value, setStored] as const;
+  return [value, setStored, isHydrated] as const;
 }

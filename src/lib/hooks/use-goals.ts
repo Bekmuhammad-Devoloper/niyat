@@ -149,16 +149,20 @@ export function monthlyProgress(goal: Goal, now: Date = new Date()): number {
 // Davriy (period-aware) helper — goal.scope'ga qarab haftalik/oylik
 export function periodProgress(goal: Goal, now: Date = new Date()): number {
   if (goal.scope === "monthly") return monthlyProgress(goal, now);
+  if (goal.scope === "daily") return isCompletedToday(goal, now) ? 1 : 0;
   return weeklyProgress(goal, now);
 }
 
 export function periodTarget(goal: Goal, now: Date = new Date()): number {
   if (goal.scope === "monthly") return monthlyTarget(goal.cadence, now);
+  // Kunlik scope — "Bugun" 0/1
+  if (goal.scope === "daily") return 1;
   return weeklyTarget(goal.cadence);
 }
 
 export function periodCompleted(goal: Goal, now: Date = new Date()): number {
   if (goal.scope === "monthly") return completedThisMonth(goal, now);
+  if (goal.scope === "daily") return isCompletedToday(goal, now) ? 1 : 0;
   return completedThisWeek(goal, now);
 }
 
@@ -306,12 +310,14 @@ export function useGoals() {
       setStored((prev) =>
         prev.map((g) => {
           if (g.id !== id) return g;
-          const isDone = g.completedDates.includes(todayIso);
+          // Eski (legacy) maqsadlarda completedDates bo'lmasligi mumkin
+          const dates = Array.isArray(g.completedDates) ? g.completedDates : [];
+          const isDone = dates.includes(todayIso);
           return {
             ...g,
             completedDates: isDone
-              ? g.completedDates.filter((d) => d !== todayIso)
-              : [...g.completedDates, todayIso],
+              ? dates.filter((d) => d !== todayIso)
+              : [...dates, todayIso],
           };
         }),
       );
@@ -325,12 +331,13 @@ export function useGoals() {
       setStored((prev) =>
         prev.map((g) => {
           if (g.id !== id) return g;
-          const isDone = g.completedDates.includes(isoDate);
+          const dates = Array.isArray(g.completedDates) ? g.completedDates : [];
+          const isDone = dates.includes(isoDate);
           return {
             ...g,
             completedDates: isDone
-              ? g.completedDates.filter((d) => d !== isoDate)
-              : [...g.completedDates, isoDate],
+              ? dates.filter((d) => d !== isoDate)
+              : [...dates, isoDate],
           };
         }),
       );

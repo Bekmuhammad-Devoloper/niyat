@@ -1,0 +1,11 @@
+[Unit]
+Description=Niyat avtodeploy - har daqiqada tekshiradi
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=niyat-autodeploy.service
+
+[Install]
+WantedBy=timers.target

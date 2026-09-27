@@ -15,24 +15,30 @@ function newItem(text: string, createdAt: number = Date.now()): NiyatItem {
 }
 
 export function useNiyats() {
-  const [items, setItems] = useLocalState<NiyatItem[]>(STORAGE_KEY, []);
+  const [items, setItems, hydrated] = useLocalState<NiyatItem[]>(STORAGE_KEY, []);
 
-  // Bir martalik migratsiya: eski string'dan birinchi item yaratish
+  // Bir martalik migratsiya: eski string'dan birinchi item yaratish.
+  // Faqat localStorage o'qilib bo'lgach (hydrated) — aks holda birinchi
+  // render'dagi bo'sh [] asosida saqlangan niyatlar ustiga yozib yuboriladi.
+  // Eski kalit ko'chirilgach o'chiriladi (har mount'da takrorlanmasin).
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (items.length > 0) return;
+    if (!hydrated) return;
     try {
       const legacyRaw = window.localStorage.getItem(LEGACY_KEY);
-      if (legacyRaw) {
+      if (!legacyRaw) return;
+      if (items.length === 0) {
         const legacy = JSON.parse(legacyRaw);
         if (typeof legacy === "string" && legacy.trim()) {
-          setItems([newItem(legacy.trim())]);
+          const migrated = newItem(legacy.trim());
+          setItems((prev) => (prev.length > 0 ? prev : [migrated]));
         }
       }
+      window.localStorage.removeItem(LEGACY_KEY);
     } catch {
       /* ignore */
     }
-  }, [items.length, setItems]);
+  }, [hydrated, items.length, setItems]);
 
   const add = useCallback(
     (text: string) => {

@@ -66,6 +66,16 @@ export function KaabaSheet({
   >("idle");
   // Heading'ni smooth qilish uchun EMA buffer
   const headingEmaRef = useRef<number | null>(null);
+  // Absolute (magnit shimol) event kelganmi? Chromium/Android'da
+  // `deviceorientation.alpha` nisbiy — ikkala event bir handler'ga ulansa
+  // heading ikki xil sanoq tizimi orasida sakraydi. Absolute kelgach nisbiy
+  // event'larni e'tiborsiz qoldiramiz.
+  const gotAbsoluteRef = useRef(false);
+  // iOS: requestPermission'dan keyin ulangan handler — sheet yopilganda
+  // olib tashlash uchun saqlaymiz (aks holda har ochilishda stack bo'ladi).
+  const iosHandlerRef = useRef<((e: DeviceOrientationEvent) => void) | null>(null);
+  // iOS ruxsati bir marta berilgan — qayta so'ramaymiz, to'g'ridan-to'g'ri ulaymiz
+  const iosGrantedRef = useRef(false);
   // True/absolute orientation aniqlanganmi? (aniqroq kompas)
   const [isAbsolute, setIsAbsolute] = useState(false);
   // Manual mode — desktop yoki sensorsiz qurilmalar uchun foydalanuvchi
@@ -113,6 +123,17 @@ export function KaabaSheet({
     const webkitHeading = (e as DeviceOrientationEvent & {
       webkitCompassHeading?: number;
     }).webkitCompassHeading;
+    const eventAbsolute = (e as DeviceOrientationEvent & { absolute?: boolean }).absolute;
+    const isAbsoluteEvent =
+      e.type === "deviceorientationabsolute" ||
+      eventAbsolute === true ||
+      typeof webkitHeading === "number";
+    if (isAbsoluteEvent) {
+      gotAbsoluteRef.current = true;
+    } else if (e.type === "deviceorientation" && gotAbsoluteRef.current) {
+      // Nisbiy event — absolute manba bor, o'tkazib yuboramiz
+      return;
+    }
     if (typeof webkitHeading === "number") {
       updateHeading(webkitHeading);
       setIsAbsolute(true);
@@ -131,6 +152,29 @@ export function KaabaSheet({
     }
   };
 
+  // iOS: listener'larni ulash/uzish — faqat bitta handler nusxasi ulangan bo'ladi
+  const attachIosListeners = () => {
+    if (iosHandlerRef.current) return; // allaqachon ulangan
+    iosHandlerRef.current = orientationHandler;
+    window.addEventListener(
+      "deviceorientationabsolute" as "deviceorientation",
+      orientationHandler,
+      true,
+    );
+    window.addEventListener("deviceorientation", orientationHandler, true);
+  };
+  const detachIosListeners = () => {
+    const h = iosHandlerRef.current;
+    if (!h) return;
+    window.removeEventListener(
+      "deviceorientationabsolute" as "deviceorientation",
+      h,
+      true,
+    );
+    window.removeEventListener("deviceorientation", h, true);
+    iosHandlerRef.current = null;
+  };
+
   // DeviceOrientationEvent — kompas. Sheet ochilganda boshlanadi.
   useEffect(() => {
     if (!open) return;
@@ -138,6 +182,8 @@ export function KaabaSheet({
       setOrientationStatus("unsupported");
       return;
     }
+    // Har ochilishda sanoq tizimini qaytadan aniqlaymiz
+    gotAbsoluteRef.current = false;
 
     // iOS 13+ permissionga muhtoj
     type IOSDOEvent = typeof DeviceOrientationEvent & {
@@ -147,9 +193,17 @@ export function KaabaSheet({
       .requestPermission;
 
     if (typeof requestPermission === "function") {
-      // iOS — foydalanuvchi tugma bosishi kerak
-      setOrientationStatus("idle");
-      return;
+      if (iosGrantedRef.current) {
+        // Ruxsat avval berilgan — status'ni "idle"ga qaytarmaymiz, to'g'ridan-to'g'ri ulaymiz
+        setOrientationStatus("granted");
+        attachIosListeners();
+      } else {
+        // iOS — foydalanuvchi tugma bosishi kerak
+        setOrientationStatus("idle");
+      }
+      return () => {
+        detachIosListeners();
+      };
     }
 
     // Android va boshqalar — to'g'ridan-to'g'ri ulashamiz.
@@ -220,13 +274,9 @@ export function KaabaSheet({
     try {
       const result = await reqPerm();
       if (result === "granted") {
+        iosGrantedRef.current = true;
         setOrientationStatus("granted");
-        window.addEventListener(
-          "deviceorientationabsolute" as "deviceorientation",
-          orientationHandler,
-          true,
-        );
-        window.addEventListener("deviceorientation", orientationHandler, true);
+        attachIosListeners();
       } else {
         setOrientationStatus("denied");
       }

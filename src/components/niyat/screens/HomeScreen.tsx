@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import { TrendingDown, TrendingUp, Minus, Flame, Mic, Plus, Pencil, MoonStar, Check, X, MicOff, Target, BookOpen, ChevronRight } from "lucide-react";
 import {
   nextPrayerHero,
-  profile,
   type NiyatItem,
 } from "@/lib/niyat-data";
 import { formatCountdown, usePrayerTimes } from "@/lib/hooks/use-prayer-times";
@@ -27,21 +26,23 @@ import { AnnouncementBanner } from "../AnnouncementBanner";
 
 function useCountUp(target: number, duration = 900) {
   const [v, setV] = useState(target);
-  const fromRef = useRef(target);
+  // Oxirgi KO'RSATILGAN qiymat — animatsiya yarmida to'xtatilsa ham
+  // keyingi animatsiya shu yerdan boshlanadi (oraliq qiymatda qotib qolmaydi).
+  const latestRef = useRef(target);
 
   useEffect(() => {
-    const from = fromRef.current;
+    const from = latestRef.current;
     if (from === target) return;
     const start = performance.now();
     let raf = 0;
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / duration);
       const eased = 1 - Math.pow(1 - t, 3);
-      setV(Math.round(from + (target - from) * eased));
+      const next = Math.round(from + (target - from) * eased);
+      latestRef.current = next;
+      setV(next);
       if (t < 1) {
         raf = requestAnimationFrame(tick);
-      } else {
-        fromRef.current = target;
       }
     };
     raf = requestAnimationFrame(tick);
@@ -110,7 +111,7 @@ export function HomeScreen({
   // bo'lishi kerak (NiyatApp), aks holda FAB bossangiz mic conflict bo'ladi.
   const sunnat = useSunnat();
   const appTime = useAppTime();
-  const { nextPrayer, hijriReadable, gregorianReadable } = usePrayerTimes();
+  const { nextPrayer, prayers, hijriReadable, gregorianReadable } = usePrayerTimes();
   const todayUz = gregorianReadable ?? formatGregorianUz(new Date());
   const { profile: user } = useUserProfile();
   const stats = useStats();
@@ -155,8 +156,12 @@ export function HomeScreen({
   const doneAnim = useCountUp(doneTasksCount);
 
   const toggleGoalDone = (id: string) => {
+    // Faqat "bajarilmagan → bajarildi" o'tishida statistika yoziladi;
+    // belgini olib tashlash (uncheck) hisobga qo'shilmaydi.
+    const goal = goals.find((g) => g.id === id);
+    const wasDone = goal ? isCompletedToday(goal) : false;
     toggleToday(id);
-    stats.markTaskDone();
+    if (!wasDone) stats.markTaskDone();
   };
 
   const saveQuickTask = () => {
@@ -183,11 +188,14 @@ export function HomeScreen({
     setAddingTask(false);
   };
 
-  const heroPrayer = nextPrayer
+  // Xuftondan keyin "next" yo'q — ro'yxatning birinchisi (Bomdod) ertangi
+  // kunga o'tadi; formatCountdown manfiy farqni o'zi 24 soatga o'raydi.
+  const heroSource = nextPrayer ?? prayers?.[0] ?? null;
+  const heroPrayer = heroSource
     ? {
-        name: nextPrayer.name,
-        time: nextPrayer.time,
-        countdown: formatCountdown(nextPrayer.time),
+        name: heroSource.name,
+        time: heroSource.time,
+        countdown: formatCountdown(heroSource.time),
       }
     : nextPrayerHero;
 
@@ -199,7 +207,7 @@ export function HomeScreen({
             Assalomu alaykum, {user.firstName}
           </h1>
           <p className="mt-1 text-[13px] text-muted-foreground tabular">
-            {hijriReadable ?? profile.hijriDate} · {todayUz}
+            {hijriReadable ?? "—"} · {todayUz}
           </p>
         </div>
 

@@ -3,6 +3,7 @@
 // Backend ulanmagan bo'lsa (503), graceful — faqat lokal profil saqlanadi.
 
 import { useCallback } from "react";
+import { writeLocalState } from "@/lib/use-local-state";
 
 const TOKEN_KEY = "niyat:auth:token";
 
@@ -105,6 +106,8 @@ async function postJson<T>(
 }
 
 // Server'dagi profile_data'ni olib, lokal localStorage'ga yuklash.
+// writeLocalState orqali — mount bo'lgan useLocalState hook'lari ham darhol
+// yangilanadi (reload shart emas).
 // Backend ulanmagan yoki ma'lumot yo'q bo'lsa — sukut.
 async function restoreProfileFromServer(token: string): Promise<{ restored: number }> {
   const apiBase = (import.meta.env.VITE_API_BASE as string | undefined) ?? "";
@@ -126,12 +129,8 @@ async function restoreProfileFromServer(token: string): Promise<{ restored: numb
     for (const [key, entry] of Object.entries(data.items)) {
       const storageKey = keyMap[key];
       if (!storageKey) continue;
-      try {
-        window.localStorage.setItem(storageKey, JSON.stringify(entry.value));
-        count++;
-      } catch {
-        /* quota / storage xato */
-      }
+      writeLocalState(storageKey, entry.value);
+      count++;
     }
     return { restored: count };
   } catch {

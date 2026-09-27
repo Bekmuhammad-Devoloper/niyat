@@ -25,11 +25,12 @@ function handleAuthFailure(): void {
   console.warn("[profile-sync] token muddati o'tgan — tozalash va reload");
   setAuthToken(null);
   try {
-    const raw = window.localStorage.getItem("niyat:profile");
+    // Profil kaliti — use-user-profile.ts bilan bir xil bo'lishi shart
+    const raw = window.localStorage.getItem("niyat:user:profile");
     if (raw) {
       const profile = JSON.parse(raw);
       profile.loggedIn = false;
-      window.localStorage.setItem("niyat:profile", JSON.stringify(profile));
+      window.localStorage.setItem("niyat:user:profile", JSON.stringify(profile));
     }
   } catch {
     /* ignore */
@@ -52,6 +53,10 @@ export function useProfileSync() {
 
   // Server tomondan boshqariladigan flaglarni lokal profile'ga ozlashtiradi.
   // Faqat haqiqatan ham ozgargan bolsa setProfile chaqiriladi.
+  // MUHIM: funksional update (prev => ...) — closure'dagi eskirgan `profile`
+  // (masalan, hydration'dan oldingi DEFAULT_PROFILE) bilan butun profilni
+  // ustidan yozib yubormaslik uchun. Bu ilgari ism/onboarded/loggedIn'ni
+  // default'ga qaytarib yuborardi.
   const applyServerFlags = useCallback(
     (
       server:
@@ -59,17 +64,17 @@ export function useProfileSync() {
         | undefined,
     ) => {
       if (!server) return;
-      if (
-        typeof server.locationLocked === "boolean" &&
-        profile.locationLocked !== server.locationLocked
-      ) {
-        setProfile({ ...profile, locationLocked: server.locationLocked });
+      if (typeof server.locationLocked === "boolean") {
+        const locked = server.locationLocked;
+        setProfile((prev) =>
+          prev.locationLocked === locked ? prev : { ...prev, locationLocked: locked },
+        );
       }
       if (typeof server.audioRequestPending === "boolean") {
         setAudioRequestPending(server.audioRequestPending);
       }
     },
-    [profile, setProfile],
+    [setProfile],
   );
 
   useEffect(() => {
@@ -156,6 +161,7 @@ export function useProfileSync() {
     profile.photoDataUrl,
     profile.isPremium,
     profile.premiumExpiresAt,
+    profile.claimedLevelRewards,
     applyServerFlags,
   ]);
 

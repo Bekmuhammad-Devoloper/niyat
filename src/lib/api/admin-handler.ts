@@ -20,6 +20,14 @@ function jsonResponse(body: unknown, init?: ResponseInit): Response {
   });
 }
 
+// Query param'ni butun songa aylantirish — NaN/bo'sh bo'lsa fallback
+// (aks holda D1 bind'da xato beradi).
+function intParam(v: string | null, fallback: number): number {
+  if (v == null || v.trim() === "") return fallback;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.trunc(n) : fallback;
+}
+
 // Dev/MVP default — production'da ADMIN_PASSWORD secret o'rnatilishi shart.
 const DEV_ADMIN_PASSWORD_FALLBACK = "yuksalish2026";
 
@@ -93,8 +101,8 @@ async function handleStats(db: D1Database): Promise<Response> {
 // ============================================================
 async function handleListUsers(request: Request, db: D1Database): Promise<Response> {
   const url = new URL(request.url);
-  const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit") ?? "50")));
-  const offset = Math.max(0, Number(url.searchParams.get("offset") ?? "0"));
+  const limit = Math.min(200, Math.max(1, intParam(url.searchParams.get("limit"), 50)));
+  const offset = Math.max(0, intParam(url.searchParams.get("offset"), 0));
   const search = (url.searchParams.get("search") ?? "").trim();
 
   let users: UserRow[];
@@ -279,8 +287,8 @@ async function handleAiLogs(
   db: D1Database,
 ): Promise<Response> {
   const url = new URL(request.url);
-  const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit") ?? "50")));
-  const offset = Math.max(0, Number(url.searchParams.get("offset") ?? "0"));
+  const limit = Math.min(200, Math.max(1, intParam(url.searchParams.get("limit"), 50)));
+  const offset = Math.max(0, intParam(url.searchParams.get("offset"), 0));
   const provider = url.searchParams.get("provider") ?? "";
   const endpoint = url.searchParams.get("endpoint") ?? "";
 

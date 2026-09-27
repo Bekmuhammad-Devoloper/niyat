@@ -23,7 +23,9 @@ export function loadDotEnvIfPresent(force = false): void {
   try {
     candidates.push(resolve(process.cwd(), ".env"));
     candidates.push(resolve(process.cwd(), "..", ".env"));
-  } catch {}
+  } catch {
+    /* cwd mavjud emas — jim o'tamiz */
+  }
 
   // 2) Script faylining katalogidan yuqoriga qidirish
   try {
@@ -33,9 +35,12 @@ export function loadDotEnvIfPresent(force = false): void {
     candidates.push(resolve(here, "..", "..", ".env"));
     candidates.push(resolve(here, "..", "..", "..", ".env"));
     candidates.push(resolve(here, "..", "..", "..", "..", ".env"));
-  } catch {}
+  } catch {
+    /* import.meta.url yo'q (bundle) — jim o'tamiz */
+  }
 
-  // 3) Production server'dagi to'liq yo'l — deploy workflow shu yerga yozadi
+  // 3) Production server'dagi to'liq yo'llar — Vega (/opt/niyat) va eski GCE
+  candidates.push("/opt/niyat/app/.env");
   candidates.push("/home/bekmuhammad_devoloper/niyat/.env");
 
   // Dublikatlarni olib tashlash

@@ -48,7 +48,14 @@ export function AutoSyncModal({
           toast.error("Server javob bermayapti. Internet bormi?");
           return;
         }
-        toast.error(err instanceof Error ? err.message : "Xato");
+        // AuthError oddiy obyekt (Error emas) — alohida tekshiramiz
+        toast.error(
+          isAuthError(err)
+            ? err.message
+            : err instanceof Error
+              ? err.message
+              : "Xato",
+        );
       }
     } finally {
       setSubmitting(false);

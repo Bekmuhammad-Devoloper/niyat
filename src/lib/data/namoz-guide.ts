@@ -126,7 +126,7 @@ const SALAVAT_DUA: PrayerStep = {
   title: "Salavat va dua",
   position: "tashahhud",
   arabic:
-    "ٱللَّهُمَّ صَلِّ عَلَىٰ مُحَمَّدٍ وَعَلَىٰ آلِ مُحَمَّدٍ كَمَا صَلَّيْتَ عَلَىٰ إِبْرَاهِيمَ وَعَلَىٰ آلِ إِبْرَاهِيمَ إِنَّكَ حَمِيدٌ مَّجِيدٌ",
+    "ٱللَّهُمَّ صَلِّ عَلَىٰ مُحَمَّدٍ وَعَلَىٰ آلِ مُحَمَّدٍ كَمَا صَلَّيْتَ عَلَىٰ إِبْرَاهِيمَ وَعَلَىٰ آلِ إِبْرَاهِيمَ إِنَّكَ حَمِيدٌ مَّجِيدٌ ۝ ٱللَّهُمَّ بَارِكْ عَلَىٰ مُحَمَّدٍ وَعَلَىٰ آلِ مُحَمَّدٍ كَمَا بَارَكْتَ عَلَىٰ إِبْرَاهِيمَ وَعَلَىٰ آلِ إِبْرَاهِيمَ إِنَّكَ حَمِيدٌ مَّجِيدٌ",
   transliteration:
     "Allohumma solli ala Muhammadin va ala ali Muhammad, kama sollayta ala Ibrohima va ala ali Ibrohima, innaka hamiydun majiyd. Allohumma barik ala Muhammadin va ala ali Muhammad, kama barokta ala Ibrohima va ala ali Ibrohima, innaka hamiydun majiyd.",
   translation:

@@ -52,7 +52,7 @@ export function premiumDaysLeft(profile: UserProfile, now: number = Date.now()):
 }
 
 export function useUserProfile() {
-  const [stored, setProfile] = useLocalState<UserProfile>(
+  const [stored, setProfile, hydrated] = useLocalState<UserProfile>(
     "niyat:user:profile",
     DEFAULT_PROFILE,
   );
@@ -63,7 +63,9 @@ export function useUserProfile() {
     () => ({ ...DEFAULT_PROFILE, ...stored }),
     [stored],
   );
-  return { profile, setProfile };
+  // `hydrated` — localStorage o'qilib bo'lgach true. Bundan oldin `profile`
+  // DEFAULT_PROFILE (onboarded=false) — routing shu flag'ni kutishi kerak.
+  return { profile, setProfile, hydrated };
 }
 
 // Parolni SHA-256 bilan hashlash — Web Crypto API bilan.

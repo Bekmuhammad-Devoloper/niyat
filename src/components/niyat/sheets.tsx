@@ -1294,7 +1294,7 @@ export function YuksalishSheet({ open, onClose }: { open: boolean; onClose: () =
         </p>
         <p className="mt-2 text-[13px] text-muted-foreground leading-relaxed">
           Niyat — Yuksalish jamoasi tomonidan ishlab chiqilgan AI hayot
-          murabbiyi. Bu shunchaki ilova emas, **tarbiya tizimi**.
+          murabbiyi. Bu shunchaki ilova emas, <strong>tarbiya tizimi</strong>.
         </p>
         <p className="mt-3 text-[11px] text-primary tracking-wider uppercase">
           ✨ Texnologiya × Niyat
@@ -1774,6 +1774,12 @@ export function QuranPlayerSheet({
 // =========================================================
 // Memorization (sura recitation)
 // =========================================================
+// Oxirgi ijro qilingan audio URL — qori+sura uchun unikal. PlayingSurah'da
+// reciter id yo'q, nomi esa takrorlanishi mumkin (POPULAR_RECITERS'da ikkita
+// "AbdulBaset AbdulSamad"), shuning uchun trekni URL bo'yicha solishtiramiz.
+// Player global bo'lgani uchun modul darajasida saqlanadi.
+let lastPlayedAudioUrl: string | null = null;
+
 export function MemorizationSheet({
   open,
   onClose,
@@ -1815,8 +1821,9 @@ export function MemorizationSheet({
     // Yangi sura yoki yangi qori → audio'ni qaytadan boshlash
     const isDifferentTrack =
       player.surah?.number !== surah.number ||
-      player.surah?.reciterName !== currentReciter.name;
+      lastPlayedAudioUrl !== audio.audioUrl;
     if (isDifferentTrack) {
+      lastPlayedAudioUrl = audio.audioUrl;
       player.play(audio.audioUrl, {
         number: surah.number ?? 0,
         arabic: surah.arabic,
@@ -2682,16 +2689,26 @@ export function ScreenTimeSheet({ open, onClose }: { open: boolean; onClose: () 
   const t = useAppTime();
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(0);
-
-  // Sheet ochilganda — agar qulflanmagan bo'lsa, oxirgi avto qiymatdan
-  // boshlaymiz; qulflangan bo'lsa input ko'rinmaydi.
+  // `t` har tick'da o'zgaradi — uni ref orqali o'qiymiz, aks holda init
+  // effekti foydalanuvchi yozayotgan soat/daqiqani har daqiqada o'chirib yuboradi.
+  const tRef = useRef(t);
   useEffect(() => {
-    if (!open) return;
-    if (t.isLocked) return;
-    const total = Math.max(t.autoTrackedMin, t.todayMin);
+    tRef.current = t;
+  });
+  const prevOpenRef = useRef(false);
+
+  // Sheet ochilganda (faqat false→true o'tishida) — agar qulflanmagan bo'lsa,
+  // oxirgi avto qiymatdan boshlaymiz; qulflangan bo'lsa input ko'rinmaydi.
+  useEffect(() => {
+    const wasOpen = prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (!open || wasOpen) return;
+    const cur = tRef.current;
+    if (cur.isLocked) return;
+    const total = Math.max(cur.autoTrackedMin, cur.todayMin);
     setHours(Math.floor(total / 60));
     setMinutes(total % 60);
-  }, [open, t.todayMin, t.autoTrackedMin, t.isLocked]);
+  }, [open]);
 
   const save = () => {
     const total = hours * 60 + minutes;

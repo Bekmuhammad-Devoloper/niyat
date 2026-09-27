@@ -61,10 +61,20 @@ export function useSpeechRecognition(opts: {
   const mutedRef = useRef(muted);
   const restartTimerRef = useRef<number | null>(null);
   const manuallyStoppedRef = useRef(false);
+  // lang — startWithLang closure'ida eng so'nggi qiymatni o'qish uchun ref
+  // (useCallback deps'ga qo'shsak, har lang o'zgarishida qayta yaratiladi)
+  const langRef = useRef(lang);
+  // language-not-supported'da onerror ichida yangi recognizer boshlanadi;
+  // eski recognizer'ning onend'i yana bitta start qilmasligi uchun flag.
+  const skipNextRestartRef = useRef(false);
 
   useEffect(() => {
     onResultRef.current = onResult;
   }, [onResult]);
+
+  useEffect(() => {
+    langRef.current = lang;
+  }, [lang]);
 
   useEffect(() => {
     alwaysOnRef.current = alwaysOn;
@@ -110,6 +120,9 @@ export function useSpeechRecognition(opts: {
           fallbackIdxRef.current++;
           const nextLang = LANG_FALLBACK_CHAIN[fallbackIdxRef.current];
           setActiveLang(nextLang);
+          // Shu recognizer'ning onend'i (hozir keladi) qayta start qilmasin —
+          // aks holda ikkita recognition parallel ishlab ketadi
+          skipNextRestartRef.current = true;
           startWithLang(nextLang);
           return;
         }
@@ -129,6 +142,13 @@ export function useSpeechRecognition(opts: {
         setIsListening(false);
       };
       rec.onend = () => {
+        // Til fallback'i onerror'da allaqachon yangi recognizer boshlagan —
+        // bu eski recognizer'ning onend'i; restart ham, isListening=false ham
+        // (yangi recognizer tinglayapti) kerak emas.
+        if (skipNextRestartRef.current) {
+          skipNextRestartRef.current = false;
+          return;
+        }
         setIsListening(false);
         // Auto-restart: alwaysOn yoqilgan va foydalanuvchi o'zi to'xtatmagan va
         // muted emas (TTS gapirmayapti)
@@ -145,7 +165,9 @@ export function useSpeechRecognition(opts: {
               !manuallyStoppedRef.current &&
               !mutedRef.current
             ) {
-              startWithLang(LANG_FALLBACK_CHAIN[fallbackIdxRef.current] ?? lang);
+              startWithLang(
+                LANG_FALLBACK_CHAIN[fallbackIdxRef.current] ?? langRef.current,
+              );
             }
           }, 300);
         }

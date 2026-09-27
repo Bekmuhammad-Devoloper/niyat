@@ -32,7 +32,7 @@ export type ParsedCommand = {
 //
 // Brace alternative: AI ba'zan oddiy [...] yoki {{ ... }} ham yozadi —
 // hammasini qo'llab-quvvatlash uchun.
-const COMMAND_RE = /[⟦\[{]{1,2}\s*(open_app|call|sms|alarm|play_quran|play_music|open_url)\s*:\s*([^⟧\]}]*?)\s*[⟧\]}]{1,2}/gi;
+const COMMAND_RE = /[⟦[{]{1,2}\s*(open_app|call|sms|alarm|play_quran|play_music|open_url)\s*:\s*([^⟧\]}]*?)\s*[⟧\]}]{1,2}/gi;
 
 export function parsePhoneCommands(text: string): ParsedCommand[] {
   const commands: ParsedCommand[] = [];
