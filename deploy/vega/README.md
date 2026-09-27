@@ -15,6 +15,7 @@ timer `niyat-autodeploy`.
 | nginx | `/etc/nginx/sites-available/niyat` — `my.niyat.tech` → :2410 |
 | Avtodeploy | `niyat-autodeploy.timer` har daqiqada `main`ni tekshiradi, `check` job o'tsa deploy |
 | Loglar | `pm2 logs niyat`, `/opt/niyat/autodeploy.log` |
+| Landing | `/opt/niyat/landing` (repo `landing/`), nginx `niyat-landing` — `niyat.tech`, `/apk` → GitHub Release `niyat.apk` |
 
 ## Bir martalik o'rnatish
 

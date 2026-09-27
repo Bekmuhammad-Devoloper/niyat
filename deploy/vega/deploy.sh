@@ -51,6 +51,9 @@ pm2 stop "$PM2_APP" >/dev/null 2>&1 || true
 npm run build >/tmp/niyat-build.log 2>&1 || { tail -30 /tmp/niyat-build.log; exit 1; }
 grep -E "built in" /tmp/niyat-build.log | tail -2
 
+log "Landing (niyat.tech) yangilash"
+mkdir -p /opt/niyat/landing && cp -r landing/. /opt/niyat/landing/
+
 log "D1 migratsiyalar (lokal SQLite: $STATE_DIR)"
 "$NODE22" node_modules/wrangler/bin/wrangler.js d1 migrations apply niyat --local --persist-to "$STATE_DIR" 2>&1 | grep -vE '^\s*$' | tail -4
 

@@ -96,8 +96,13 @@ log "pm2: $(pm2 describe niyat 2>/dev/null | grep -E 'status' | head -1 | tr -s 
 cp deploy/vega/nginx-niyat.conf /etc/nginx/sites-available/niyat
 sed -i 's/\r$//' /etc/nginx/sites-available/niyat
 ln -sf /etc/nginx/sites-available/niyat /etc/nginx/sites-enabled/niyat
+# 7b) Landing (niyat.tech) — statik sahifa
+mkdir -p "$BASE/landing" && cp -r "$APP/landing/." "$BASE/landing/"
+cp deploy/vega/nginx-niyat-landing.conf /etc/nginx/sites-available/niyat-landing
+sed -i 's/$//' /etc/nginx/sites-available/niyat-landing
+ln -sf /etc/nginx/sites-available/niyat-landing /etc/nginx/sites-enabled/niyat-landing
 nginx -t && systemctl reload nginx
-log "nginx: niyat sayti yoqildi (my.niyat.tech -> :2410)"
+log "nginx: niyat (my.niyat.tech -> :2410) va niyat-landing (niyat.tech) yoqildi"
 
 # 8) Avtodeploy timer
 cp deploy/vega/niyat-autodeploy.service deploy/vega/niyat-autodeploy.timer /etc/systemd/system/
@@ -118,4 +123,4 @@ echo
 echo "Keyingi qadamlar:"
 echo "  1) $APP/.dev.vars ni to'ldiring (GCE: /home/bekmuhammad_devoloper/niyat/.dev.vars), keyin: pm2 restart niyat"
 echo "  2) GCE D1 bazasini ko'chiring: .wrangler/state/v3/d1/miniflare-D1DatabaseObject/*.sqlite -> $STATE/v3/d1/miniflare-D1DatabaseObject/ (pm2 stop niyat; nusxalash; pm2 start niyat)"
-echo "  3) DNS: my.niyat.tech A -> 62.171.184.14, keyin: bash $BASE/go-live.sh"
+echo "  3) DNS: my.niyat.tech, niyat.tech (@), www.niyat.tech A -> 62.171.184.14, keyin: bash $BASE/go-live.sh"

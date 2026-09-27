@@ -23,7 +23,6 @@ on:
 env:
   # Production API endpoint — APK shu URL'ga so'rov yuboradi
   VITE_API_BASE: https://my.niyat.tech
-  VITE_ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
 
 jobs:
   build:
@@ -72,6 +71,9 @@ jobs:
           mkdir -p artifacts
           SAFE_NAME=$(echo "${{ github.ref_name }}" | tr '/' '-')
           cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/niyat-${SAFE_NAME}-${{ github.run_number }}.apk
+          # Barqaror nom — landing sahifa (niyat.tech) har doim shu faylga havola qiladi:
+          # https://github.com/Bekmuhammad-Devoloper/niyat/releases/latest/download/niyat.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/niyat.apk
           ls -la artifacts/
 
       - name: Upload APK artifact

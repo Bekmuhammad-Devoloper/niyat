@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="uz">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Niyat — Muslim yoshlar uchun AI murabbiy</title>
+  <meta name="description" content="Niyat — musulmon yoshlar uchun Islomiy hayot murabbiyi: AI coach, namoz vaqtlari, qibla, maqsadlar, Qur'on va sunnatlar. Android ilovasini yuklab oling." />
+  <meta property="og:title" content="Niyat — Muslim yoshlar uchun AI murabbiy" />
+  <meta property="og:description" content="Biz texnologiya sotmaymiz — tarbiya beramiz. Android ilovasini yuklab oling." />
+  <meta property="og:image" content="https://niyat.tech/logo.png" />
+  <meta property="og:url" content="https://niyat.tech/" />
+  <meta name="theme-color" content="#0E1410" />
+  <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Lora:ital,wght@0,500;0,600;1,500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0E1410;
+      --bg-2: #141C16;
+      --card: #1A211C;
+      --border: rgba(212, 184, 106, 0.14);
+      --fg: #F2EFE6;
+      --muted: #A9B0A8;
+      --dim: #7C847B;
+      --gold: #D4B86A;
+      --gold-2: #8C7A47;
+      --green: #4F8A5E;
+      --radius: 20px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: "";
+      position: fixed; inset: 0; z-index: -1;
+      background:
+        radial-gradient(60% 40% at 50% -10%, rgba(212,184,106,0.16), transparent 70%),
+        radial-gradient(40% 30% at 90% 100%, rgba(79,138,94,0.12), transparent 70%);
+    }
+    a { color: var(--gold); text-decoration: none; }
+    .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 0;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; color: var(--fg); font-weight: 600; }
+    .brand img { width: 36px; height: 36px; border-radius: 10px; }
+    nav a { color: var(--muted); font-size: 14px; margin-left: 22px; }
+    nav a:hover { color: var(--fg); }
+
+    .hero { text-align: center; padding: 56px 0 40px; }
+    .hero img.logo {
+      width: 128px; height: 128px; border-radius: 32px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px var(--border);
+    }
+    .hero h1 {
+      font-family: Lora, Georgia, serif; font-weight: 600;
+      font-size: clamp(32px, 6vw, 52px); line-height: 1.12; margin: 28px 0 14px;
+    }
+    .hero h1 em { font-style: italic; color: var(--gold); }
+    .hero p.lead { color: var(--muted); font-size: clamp(16px, 2.4vw, 19px); max-width: 620px; margin: 0 auto 30px; }
+
+    .cta { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; align-items: center; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 10px;
+      padding: 15px 26px; border-radius: 14px; font-weight: 600; font-size: 16px;
+      transition: transform .12s ease, box-shadow .12s ease, background .12s ease;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--gold), var(--gold-2));
+      color: #14120A; box-shadow: 0 10px 30px rgba(212,184,106,0.25);
+    }
+    .btn-primary:hover { box-shadow: 0 14px 36px rgba(212,184,106,0.35); }
+    .btn-ghost { background: var(--card); color: var(--fg); border: 1px solid var(--border); }
+    .btn-ghost:hover { background: #202924; }
+    .btn svg { width: 20px; height: 20px; flex: none; }
+    .meta { color: var(--dim); font-size: 13px; margin-top: 14px; }
+    .meta span + span::before { content: "·"; margin: 0 8px; }
+
+    section { padding: 40px 0; }
+    h2 {
+      font-family: Lora, Georgia, serif; font-weight: 600; font-size: 28px;
+      margin: 0 0 6px; text-align: center;
+    }
+    .sub { color: var(--muted); text-align: center; margin: 0 0 28px; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+    .card {
+      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 22px 20px;
+    }
+    .card .ic {
+      width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+      background: rgba(212,184,106,0.12); color: var(--gold); margin-bottom: 14px;
+    }
+    .card .ic svg { width: 22px; height: 22px; }
+    .card h3 { margin: 0 0 6px; font-size: 16px; }
+    .card p { margin: 0; color: var(--muted); font-size: 14px; }
+
+    .steps { counter-reset: s; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; }
+    .step { background: var(--bg-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 20px; position: relative; }
+    .step::before {
+      counter-increment: s; content: counter(s);
+      display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%;
+      background: var(--gold); color: #14120A; font-weight: 700; font-size: 14px; margin-bottom: 12px;
+    }
+    .step h3 { margin: 0 0 6px; font-size: 15px; }
+    .step p { margin: 0; color: var(--muted); font-size: 14px; }
+    .step code { background: rgba(255,255,255,0.06); padding: 2px 6px; border-radius: 6px; font-size: 13px; }
+
+    .note {
+      margin-top: 18px; padding: 14px 18px; border-radius: 14px;
+      background: rgba(79,138,94,0.10); border: 1px solid rgba(79,138,94,0.3);
+      color: var(--muted); font-size: 14px;
+    }
+
+    .quote {
+      text-align: center; padding: 48px 20px; margin: 20px 0;
+      font-family: Lora, Georgia, serif; font-style: italic; font-size: clamp(18px, 3vw, 24px); color: var(--fg);
+      border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+    }
+    .quote small { display: block; margin-top: 10px; font-family: Inter, sans-serif; font-style: normal; font-size: 13px; color: var(--dim); }
+
+    footer { padding: 36px 0 40px; color: var(--dim); font-size: 13px; text-align: center; }
+    footer a { color: var(--muted); margin: 0 8px; }
+
+    @media (max-width: 560px) {
+      nav { display: none; }
+      .hero { padding-top: 36px; }
+      .btn { width: 100%; justify-content: center; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <a class="brand" href="/"><img src="/logo.png" alt="" /> Niyat</a>
+      <nav>
+        <a href="#imkoniyatlar">Imkoniyatlar</a>
+        <a href="#ornatish">O'rnatish</a>
+        <a href="https://my.niyat.tech/">Web versiya</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <img class="logo" src="/logo.png" alt="Niyat ilovasi logotipi" width="128" height="128" />
+      <h1>Har kuningizni <em>niyat</em> bilan boshlang</h1>
+      <p class="lead">
+        Niyat — musulmon yoshlar uchun Islomiy hayot murabbiyi. AI coach, namoz vaqtlari,
+        qibla, maqsadlar, Qur'on va sunnatlar — bitta ilovada.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" id="dl" href="/apk">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+          Android uchun yuklab olish
+        </a>
+        <a class="btn btn-ghost" href="https://my.niyat.tech/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20z"/></svg>
+          Brauzerda ochish
+        </a>
+      </div>
+      <p class="meta" id="meta"><span>Android 8+</span><span>APK, bepul</span></p>
+    </section>
+
+    <section id="imkoniyatlar">
+      <h2>Nima bor?</h2>
+      <p class="sub">Biz texnologiya sotmaymiz — tarbiya beramiz.</p>
+      <div class="grid">
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+          <h3>AI murabbiy</h3>
+          <p>Kunlik suhbat, ovozli rejim, shaxsiy maslahat — Islomiy qadriyatlar asosida, o'zbek tilida.</p>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+          <h3>Namoz va qibla</h3>
+          <p>Shahringiz bo'yicha aniq namoz vaqtlari, azon eslatmasi, qibla kompasi va Ka'ba jonli efiri.</p>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>
+          <h3>Maqsadlar</h3>
+          <p>Yillik, oylik, haftalik va kunlik maqsadlar; streak, daraja va ovozli eslatmalar.</p>
+        </div>
+        <div class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg></div>
+          <h3>Qur'on va sunnatlar</h3>
+          <p>Tilovat va yodlash, 99 ism, kunlik sunnat amallar, Buxoriy hadislari, sadaqa kundaligi.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="ornatish">
+      <h2>O'rnatish</h2>
+      <p class="sub">Ilova hozircha Google Play'da emas — APK faylni to'g'ridan-to'g'ri o'rnatasiz.</p>
+      <div class="steps">
+        <div class="step">
+          <h3>APK'ni yuklab oling</h3>
+          <p>Yuqoridagi tugmani bosing. Fayl <code>niyat.apk</code> nomi bilan "Yuklamalar" papkasiga tushadi.</p>
+        </div>
+        <div class="step">
+          <h3>Ruxsat bering</h3>
+          <p>Faylni ochganda "Noma'lum manbalardan o'rnatish" so'ralsa — brauzeringiz uchun ruxsat bering.</p>
+        </div>
+        <div class="step">
+          <h3>O'rnating va oching</h3>
+          <p>"O'rnatish" ni bosing. Birinchi ochilishda telefon raqam bilan ro'yxatdan o'ting.</p>
+        </div>
+      </div>
+      <div class="note">
+        Google Play Protect ogohlantirsa — "Baribir o'rnatish" ni tanlang. Ilova ochiq manbali:
+        <a href="https://github.com/Bekmuhammad-Devoloper/niyat">github.com/Bekmuhammad-Devoloper/niyat</a>.
+      </div>
+    </section>
+
+    <div class="quote">
+      "Amallar niyatlarga bog'liqdir."
+      <small>Buxoriy va Muslim rivoyati</small>
+    </div>
+
+    <footer>
+      <a href="https://my.niyat.tech/">Web versiya</a>
+      <a href="https://github.com/Bekmuhammad-Devoloper/niyat/releases">Barcha versiyalar</a>
+      <a href="https://github.com/Bekmuhammad-Devoloper/niyat">GitHub</a>
+      <div style="margin-top:10px">© <span id="y"></span> Yuksalish · Niyat</div>
+    </footer>
+  </div>
+
+  <script>
+    document.getElementById("y").textContent = new Date().getFullYear();
+    // Oxirgi versiya va hajmini GitHub'dan ko'rsatish (bo'lmasa jim o'tadi)
+    fetch("https://api.github.com/repos/Bekmuhammad-Devoloper/niyat/releases/latest")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((rel) => {
+        if (!rel) return;
+        var apk = (rel.assets || []).find(function (a) { return a.name === "niyat.apk"; });
+        var parts = ["Android 8+"];
+        if (rel.tag_name) parts.push("Versiya " + rel.tag_name.replace(/^v/, ""));
+        if (apk && apk.size) parts.push((apk.size / 1048576).toFixed(1) + " MB");
+        if (rel.published_at) {
+          var d = new Date(rel.published_at);
+          parts.push(d.toLocaleDateString("uz-UZ", { day: "numeric", month: "long", year: "numeric" }));
+        }
+        document.getElementById("meta").innerHTML = parts.map(function (p) { return "<span>" + p + "</span>"; }).join("");
+      })
+      .catch(function () {});
+  </script>
+</body>
+</html>
