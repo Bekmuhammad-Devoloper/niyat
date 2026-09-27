@@ -10,6 +10,7 @@ BRANCH="${1:-main}"
 APP_DIR="${APP_DIR:-/opt/niyat/app}"
 STATE_DIR="${STATE_DIR:-/opt/niyat/state}"
 PM2_APP="${PM2_APP:-niyat}"
+NODE22="${NODE22:-/opt/niyat/node/bin/node}"   # wrangler uchun (Node >=22)
 export HOME="${HOME:-/root}"
 export PM2_HOME="${PM2_HOME:-/root/.pm2}"
 
@@ -51,7 +52,7 @@ npm run build >/tmp/niyat-build.log 2>&1 || { tail -30 /tmp/niyat-build.log; exi
 grep -E "built in" /tmp/niyat-build.log | tail -2
 
 log "D1 migratsiyalar (lokal SQLite: $STATE_DIR)"
-node node_modules/wrangler/bin/wrangler.js d1 migrations apply niyat --local --persist-to "$STATE_DIR" 2>&1 | grep -vE '^\s*$' | tail -4
+"$NODE22" node_modules/wrangler/bin/wrangler.js d1 migrations apply niyat --local --persist-to "$STATE_DIR" 2>&1 | grep -vE '^\s*$' | tail -4
 
 log "pm2 ishga tushirish"
 if pm2 describe "$PM2_APP" >/dev/null 2>&1; then

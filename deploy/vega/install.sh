@@ -17,6 +17,7 @@ BRANCH="main"
 BASE=/opt/niyat
 APP=$BASE/app
 STATE=$BASE/state
+NODE22=$BASE/node/bin/node    # wrangler 4.x uchun Node >=22 (tizim node'i v20 — boshqa loyihalarniki)
 
 log() { echo "==> $*"; }
 
@@ -39,6 +40,18 @@ fi
 cp deploy/vega/ecosystem.config.js deploy/vega/deploy.sh deploy/vega/autodeploy.sh deploy/vega/go-live.sh "$BASE/"
 sed -i 's/\r$//' "$BASE"/*.sh "$BASE"/ecosystem.config.js
 chmod +x "$BASE"/*.sh
+
+# 2b) Node 22 — faqat /opt/niyat/node ichida, tizimga tegmaydi
+if [ ! -x "$NODE22" ]; then
+  TARBALL=$(curl -s -m 20 https://nodejs.org/dist/latest-v22.x/ | grep -oE 'node-v22[0-9.]+-linux-x64\.tar\.xz' | head -1)
+  [ -n "$TARBALL" ] || TARBALL=node-v22.23.3-linux-x64.tar.xz
+  log "Node 22 yuklanmoqda: $TARBALL"
+  curl -sL -m 300 -o /tmp/$TARBALL "https://nodejs.org/dist/latest-v22.x/$TARBALL"
+  rm -rf "$BASE/node.new" && mkdir -p "$BASE/node.new"
+  tar -xJf /tmp/$TARBALL -C "$BASE/node.new" --strip-components=1
+  rm -rf "$BASE/node" && mv "$BASE/node.new" "$BASE/node" && rm -f /tmp/$TARBALL
+fi
+log "Node (niyat): $("$NODE22" -v)"
 
 # 3) Bog'liqliklar + build (agar hali yo'q bo'lsa)
 if [ ! -d node_modules ]; then
@@ -68,7 +81,7 @@ fi
 
 # 5) D1 migratsiyalar (lokal SQLite: $STATE/v3/d1/)
 log "D1 migratsiyalar"
-node node_modules/wrangler/bin/wrangler.js d1 migrations apply niyat --local --persist-to "$STATE" 2>&1 | grep -E '✅|❌|Error' | tail -9 || true
+"$NODE22" node_modules/wrangler/bin/wrangler.js d1 migrations apply niyat --local --persist-to "$STATE" 2>&1 | grep -E '✅|❌|Error' | tail -9 || true
 
 # 6) pm2
 if pm2 describe niyat >/dev/null 2>&1; then
