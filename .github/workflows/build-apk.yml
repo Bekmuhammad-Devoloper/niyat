@@ -24,6 +24,10 @@ env:
   # Production API endpoint — APK shu URL'ga so'rov yuboradi
   VITE_API_BASE: https://my.niyat.tech
 
+# Release yaratish uchun GITHUB_TOKEN'ga yozish ruxsati kerak (default: read-only)
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build Debug APK
