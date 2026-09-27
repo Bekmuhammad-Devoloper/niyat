@@ -238,9 +238,10 @@ function MainAppInner({
   // Ekran vaqti kuzatuvi — joriy tabni hookga uzatamiz, u shu ekranga
   // sarflangan daqiqalarni alohida saqlaydi.
   const appTime = useAppTime();
+  const { setActiveScreen } = appTime; // barqaror callback — har render'da effect qayta ishlamasin
   useEffect(() => {
-    appTime.setActiveScreen(tab);
-  }, [tab, appTime]);
+    setActiveScreen(tab);
+  }, [tab, setActiveScreen]);
   // Namoz vaqtlari aniq bo'lishi uchun joylashuv kerak — ilova birinchi
   // ochilganda avtomatik so'rab olamiz (faqat agar hali sozlanmagan bo'lsa).
   const geoAuto = useGeolocation();

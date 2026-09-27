@@ -56,6 +56,10 @@ export function useLocalState<T>(key: string, defaultValue: T) {
   const [isHydrated, setIsHydrated] = useState(false);
   const hydrated = useRef(false);
   const localListenerRef = useRef<Listener | null>(null);
+  // Oxirgi ko'rilgan xom (raw) qiymat — bir xil raw kelsa qayta parse qilib
+  // yangi obyekt yaratmaymiz (aks holda consumer'lar keraksiz re-render bo'ladi
+  // va effect'lar bir-birini cheksiz uyg'otishi mumkin).
+  const lastRawRef = useRef<string | null>(null);
 
   // Mount: localStorage'dan o'qish + listener
   useEffect(() => {
@@ -65,6 +69,7 @@ export function useLocalState<T>(key: string, defaultValue: T) {
     try {
       const raw = window.localStorage.getItem(key);
       if (raw !== null) {
+        lastRawRef.current = raw;
         setValue(JSON.parse(raw) as T);
       }
     } catch (err) {
@@ -75,6 +80,8 @@ export function useLocalState<T>(key: string, defaultValue: T) {
     setIsHydrated(true);
 
     const listener: Listener = (raw) => {
+      if (raw === lastRawRef.current) return; // o'zgarish yo'q
+      lastRawRef.current = raw;
       if (raw === null) {
         setValue(defaultValue);
         return;
@@ -111,6 +118,12 @@ export function useLocalState<T>(key: string, defaultValue: T) {
           typeof updater === "function"
             ? (updater as (p: T) => T)(prev)
             : updater;
+        // Updater `prev`ni o'zgarishsiz qaytarsa — HECH QANDAY side effect yo'q.
+        // Aks holda localStorage'ga yozish + notify boshqa instansiyalarni
+        // yangi obyekt bilan re-render qiladi, ular effect'larida yana
+        // setState chaqiradi va cheksiz ping-pong boshlanadi ("Maximum update
+        // depth exceeded"; appTime.setActiveScreen shu tarzda loop bo'lardi).
+        if (Object.is(next, prev)) return prev;
         // Side effects (localStorage va boshqa instansiyalarga notify) —
         // setTimeout orqali joriy React work-loop tugashidan keyin bajariladi.
         // queueMicrotask concurrent rendering paytida render fazasida ishga
@@ -120,6 +133,8 @@ export function useLocalState<T>(key: string, defaultValue: T) {
           setTimeout(() => {
             try {
               const raw = JSON.stringify(next);
+              if (raw === lastRawRef.current) return; // mazmunan o'zgarmagan
+              lastRawRef.current = raw;
               window.localStorage.setItem(key, raw);
               notify(key, raw, localListenerRef.current ?? undefined);
             } catch (err) {
