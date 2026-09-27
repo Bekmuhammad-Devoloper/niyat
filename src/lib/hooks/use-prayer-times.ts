@@ -1,6 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { fetchPrayerTimes, type PrayerName, type PrayerTimesResult } from "@/lib/api/aladhan";
-import { fetchPrayerTimesIslomUz, nearestRegion } from "@/lib/api/islomapi";
+import { fetchOfficialMonth, toResult } from "@/lib/api/prayer-api";
+import {
+  cityFromLegacyRegion,
+  findCity,
+  nearestCity,
+  DEFAULT_CITY_SLUG,
+  type UzCity,
+} from "@/lib/data/uz-cities";
 import type { Prayer } from "@/lib/niyat-data";
 import { useSettings } from "./use-settings";
 
@@ -20,7 +27,7 @@ function parseHMM(time: string): number {
 }
 
 // Joriy vaqt asosida qaysi namoz "done", "now", "next" ekanligini hisoblaydi.
-// "now" — eng yaqin keladigan (yoki o'tib ketgan, lekin keyingisi hali kelmagan) namoz.
+// "now" — oxirgi vaqti kirgan namoz (keyingisi kelguncha).
 function toPrayerList(result: PrayerTimesResult, now: Date = new Date()): Prayer[] {
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const entries = PRAYER_ORDER.map((name) => ({
@@ -29,8 +36,6 @@ function toPrayerList(result: PrayerTimesResult, now: Date = new Date()): Prayer
     minutes: parseHMM(result.timings[name]),
   }));
 
-  // Joriy paytda qaysi namoz "now" deb hisoblanadi:
-  // oxirgi vaqti o'tgan namozni "now" deb belgilaymiz — keyingisi kelguncha.
   let nowIndex = -1;
   for (let i = 0; i < entries.length; i++) {
     if (nowMin >= entries[i].minutes) nowIndex = i;
@@ -50,60 +55,130 @@ export type UsePrayerTimesOptions = {
   longitude?: number;
 };
 
+// Sozlama + joylashuvdan shaharni aniqlash:
+//   - prayerRegion = shahar slug'i ("samarqand") yoki eski viloyat nomi ("Toshkent")
+//   - bo'sh ("") = AVTO: joylashuv bo'yicha eng yaqin shahar; joylashuv yo'q — Toshkent
+export function resolvePrayerCity(
+  prayerRegion: string | undefined,
+  latitude?: number,
+  longitude?: number,
+): { city: UzCity; auto: boolean } {
+  const chosen = findCity(prayerRegion) ?? cityFromLegacyRegion(prayerRegion);
+  if (chosen) return { city: chosen, auto: false };
+  if (latitude != null && longitude != null) {
+    return { city: nearestCity(latitude, longitude), auto: true };
+  }
+  return { city: findCity(DEFAULT_CITY_SLUG)!, auto: true };
+}
+
 export function usePrayerTimes(options: UsePrayerTimesOptions = {}) {
   const { settings } = useSettings();
   const today = new Date();
-  const dateKey = `${today.getFullYear()}-${today.getMonth()}-${today.getDate()}`;
+  const year = today.getFullYear();
+  const month = today.getMonth() + 1;
+  const dateKey = `${year}-${month}-${today.getDate()}`;
 
-  // Settings'dan joylashuv va madhhab/method'ni olamiz.
   const latitude = options.latitude ?? settings.location?.latitude;
   const longitude = options.longitude ?? settings.location?.longitude;
   const school = settings.madhhab === "hanafi" ? 1 : 0;
   const method = settings.calculationMethod;
 
-  // Joriy viloyat — foydalanuvchi sozlamadan tanlasa, shuni ishlatamiz;
-  // bo'lmasa joylashuvdan eng yaqin viloyatni topamiz; bo'lmasa Toshkent.
-  const region =
-    settings.prayerRegion ||
-    (latitude != null && longitude != null
-      ? nearestRegion(latitude, longitude)
-      : "Toshkent");
+  const { city, auto } = resolvePrayerCity(settings.prayerRegion, latitude, longitude);
 
-  const query = useQuery({
-    queryKey: ["prayer-times", dateKey, region, latitude, longitude, school, method],
-    queryFn: async ({ signal }) => {
-      // 1) Avval islom.uz dan urinamiz (rasmiy O'zbekiston manbasi)
-      try {
-        return await fetchPrayerTimesIslomUz({ region, date: today, signal });
-      } catch (err) {
-        console.warn("[prayer-times] islom.uz failed, fallback to Aladhan", err);
-      }
-      // 2) Fallback — Aladhan global API
-      return fetchPrayerTimes({
-        latitude,
-        longitude,
-        school,
-        method,
-        date: today,
-        signal,
-      });
-    },
+  // Rasmiy oylik jadval — bir marta yuklanadi, oy davomida keshda turadi.
+  const official = useQuery({
+    queryKey: ["prayer-official", city.slug, year, month],
+    queryFn: ({ signal }) => fetchOfficialMonth(city, year, month, signal),
+    staleTime: 1000 * 60 * 60 * 12,
+    gcTime: 1000 * 60 * 60 * 24 * 2,
+    retry: 2,
+  });
+
+  // Ertangi kun keyingi oyda bo'lsa (oy oxiri) — keyingi oy jadvalini ham
+  // oldindan yuklaymiz: Xuftondan keyin "Keyingi namoz" ERTANGI Bomdod bo'lishi
+  // kerak (bugungi Bomdod bilan 1 daqiqa farq qilishi mumkin).
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+  const tomorrowInNextMonth = tomorrow.getMonth() !== today.getMonth();
+  const nextMonthDate = tomorrowInNextMonth ? tomorrow : null;
+  const officialNext = useQuery({
+    queryKey: [
+      "prayer-official",
+      city.slug,
+      nextMonthDate?.getFullYear() ?? year,
+      (nextMonthDate?.getMonth() ?? 0) + 1,
+    ],
+    queryFn: ({ signal }) =>
+      fetchOfficialMonth(city, nextMonthDate!.getFullYear(), nextMonthDate!.getMonth() + 1, signal),
+    enabled: tomorrowInNextMonth,
+    staleTime: 1000 * 60 * 60 * 12,
+    gcTime: 1000 * 60 * 60 * 24 * 2,
+    retry: 2,
+  });
+
+  // Zaxira — Aladhan (hisoblangan). Faqat rasmiy manba XATO bergandagina.
+  const fallback = useQuery({
+    queryKey: ["prayer-aladhan", dateKey, latitude, longitude, school, method],
+    queryFn: ({ signal }) =>
+      fetchPrayerTimes({ latitude, longitude, school, method, date: today, signal }),
+    enabled: official.isError,
     staleTime: 1000 * 60 * 60,
-    gcTime: 1000 * 60 * 60 * 6,
     retry: 1,
   });
 
-  const prayers = query.data ? toPrayerList(query.data) : null;
-  const nextPrayer = prayers?.find((p) => p.state === "next") ?? null;
+  let data: PrayerTimesResult | null = null;
+  let sunrise: string | null = null;
+  let source: "official" | "aladhan" | null = null;
+  if (official.data) {
+    try {
+      const r = toResult(official.data, today);
+      data = r;
+      sunrise = r.sunrise;
+      source = "official";
+    } catch (err) {
+      console.warn("[prayer-times] rasmiy jadvalda bugungi kun yo'q", err);
+    }
+  }
+  if (!data && fallback.data) {
+    data = fallback.data;
+    source = "aladhan";
+  }
+
+  const prayers = data ? toPrayerList(data) : null;
+  let nextPrayer = prayers?.find((p) => p.state === "next") ?? null;
   const currentPrayer = prayers?.find((p) => p.state === "now") ?? null;
 
+  // Bugungi barcha namozlar o'tgan (Xuftondan keyin) — keyingisi ERTANGI Bomdod.
+  // Rasmiy jadvaldan ertangi kunning aniq vaqtini olamiz.
+  if (prayers && !nextPrayer) {
+    const monthData = tomorrowInNextMonth ? officialNext.data : official.data;
+    const entry = monthData?.days.find((d) => d.day === tomorrow.getDate());
+    nextPrayer = {
+      id: "fajr",
+      name: PRAYER_LABELS_UZ.Fajr,
+      time: entry?.fajr ?? prayers[0].time,
+      state: "next",
+    };
+  }
+
+  const isLoading = official.isLoading || (official.isError && fallback.isLoading);
+  const isError = official.isError && fallback.isError;
+
   return {
-    ...query,
+    data,
+    isLoading,
+    isError,
+    error: official.error ?? fallback.error ?? null,
+    refetch: official.refetch,
     prayers,
     nextPrayer,
     currentPrayer,
-    hijriReadable: query.data?.hijriReadable ?? null,
-    gregorianReadable: query.data?.gregorianReadable ?? null,
+    sunrise,
+    source,
+    city,
+    cityAuto: auto,
+    hijriReadable: data?.hijriReadable ?? null,
+    gregorianReadable: data?.gregorianReadable ?? null,
   };
 }
 

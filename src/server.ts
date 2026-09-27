@@ -16,6 +16,7 @@ import { handleAdminRequest } from "./lib/api/admin-handler";
 import { handleAnnouncementsRequest } from "./lib/api/announcements-handler";
 import { handleProfileSyncRequest } from "./lib/api/profile-sync-handler";
 import { handlePushRequest } from "./lib/api/push-handler";
+import { handlePrayerRequest } from "./lib/api/prayer-handler";
 import type { D1Database } from "./lib/db/types";
 
 type ServerEntry = {
@@ -358,6 +359,11 @@ export default {
           await handleProfileSyncRequest(request, url.pathname, secrets?.DB),
           request,
         );
+      }
+      // Namoz vaqtlari — rasmiy jadval proksi + D1 kesh
+      if (url.pathname.startsWith("/api/prayer/")) {
+        const secrets = getSecrets(env);
+        return addCorsHeaders(await handlePrayerRequest(request, secrets?.DB), request);
       }
       // Push notifications
       if (url.pathname.startsWith("/api/push/")) {

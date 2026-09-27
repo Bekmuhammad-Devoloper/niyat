@@ -121,7 +121,7 @@ export const DEFAULT_SETTINGS: Settings = {
   aiPersonality: "balanced",
   madhhab: "hanafi",
   calculationMethod: 1, // University of Islamic Sciences, Karachi
-  prayerRegion: "Toshkent", // islom.uz API uchun default viloyat
+  prayerRegion: "", // "" = AVTO (joylashuvga eng yaqin shahar); aks holda shahar slug'i (uz-cities.ts)
   location: null, // Aladhan'ga uzatilmasa, Toshkent default
   notifications: {
     prayerReminders: false,

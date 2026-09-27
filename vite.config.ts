@@ -200,6 +200,14 @@ function niyatBackendDevPlugin(): Plugin {
             return pipeResponse(response, res);
           }
 
+          // /api/prayer/*
+          if (url.startsWith("/api/prayer/")) {
+            const { handlePrayerRequest } = await import("./src/lib/api/prayer-handler");
+            const db = await getDb();
+            const response = await handlePrayerRequest(request, db as never);
+            return pipeResponse(response, res);
+          }
+
           // /api/push/*
           if (url.startsWith("/api/push/")) {
             const { handlePushRequest } = await import("./src/lib/api/push-handler");

@@ -57,7 +57,7 @@ import { useSunnatSimplify } from "@/lib/hooks/use-sunnat-simplify";
 import { useQuranSurah, useQuranChapters, useReciters } from "@/lib/hooks/use-quran-surah";
 import { useQuranPlayer } from "@/lib/audio/quran-player";
 import { DEFAULT_RECITER_ID, POPULAR_RECITERS } from "@/lib/api/quran";
-import { ISLOMUZ_REGIONS } from "@/lib/api/islomapi";
+import { UZ_CITIES, findCity, cityFromLegacyRegion } from "@/lib/data/uz-cities";
 import { useAsmaProgress } from "@/lib/hooks/use-asma";
 import { useAppTime } from "@/lib/hooks/use-app-time";
 import { CATEGORY_LABELS, type Sunnat, type SunnatCategory } from "@/lib/data/sunnats";
@@ -435,17 +435,22 @@ export function PrayerSettingsSheet({ open, onClose }: { open: boolean; onClose:
         </div>
 
         <div>
-          <p className="text-[13px] text-tertiary mb-2">
-            O'zbekiston viloyati (islom.uz dan)
-          </p>
+          <p className="text-[13px] text-tertiary mb-2">Shahar (rasmiy jadval)</p>
           <Picker
-            value={settings.prayerRegion}
+            value={findCity(settings.prayerRegion)?.slug ?? cityFromLegacyRegion(settings.prayerRegion)?.slug ?? ""}
             onChange={(v) => update({ prayerRegion: v })}
-            label="Viloyat"
-            options={ISLOMUZ_REGIONS.map((r) => ({ value: r, label: r }))}
+            label="Shahar"
+            options={[
+              { value: "", label: "Avto — joylashuv bo'yicha" },
+              ...UZ_CITIES.map((c) => ({
+                value: c.slug,
+                label: c.name === c.region ? c.name : `${c.name} (${c.region})`,
+              })),
+            ]}
           />
           <p className="text-[11px] text-tertiary mt-2">
-            Vaqtlar rasmiy <strong>islom.uz</strong> kalendaridan olinadi.
+            Vaqtlar O'zbekiston Musulmonlar idorasining rasmiy taqvimidan, shahar
+            bo'yicha, daqiqasigacha aniq olinadi.
           </p>
         </div>
 
