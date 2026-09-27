@@ -16,7 +16,7 @@ module.exports = {
       name: 'niyat',
       cwd: '/opt/niyat/app',
       script: 'node_modules/wrangler/bin/wrangler.js',
-      args: 'dev --config dist/server/wrangler.json --port 2410 --ip 127.0.0.1 --persist-to /opt/niyat/state --show-interactive-dev-session=false',
+      args: 'dev --config dist/server/wrangler.json --port 2410 --ip 127.0.0.1 --persist-to /opt/niyat/state --env-file /opt/niyat/app/.dev.vars --show-interactive-dev-session=false',
       // Wrangler 4.x Node >=22 talab qiladi; tizim node'i (v20) boshqa
       // loyihalarniki — tegmaymiz. Niyat uchun alohida /opt/niyat/node.
       interpreter: '/opt/niyat/node/bin/node',
